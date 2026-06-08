@@ -50,6 +50,43 @@ MARKET_SUFFIX = {
     "Commodity":         "",      # GC=F, XAUUSD=X stays as-is
 }
 
+# ─── COMMODITY ALIAS MAP ──────────────────────────────────────────
+# yFinance punya known issues dengan FX-style commodity spot (XAUUSD=X dll):
+# data sub-hourly sering kosong walaupun ticker valid. Solusi: auto-remap ke
+# futures equivalent (GC=F, SI=F, dll) yang DATA-NYA RELIABLE di yFinance.
+COMMODITY_ALIAS = {
+    # Precious metals
+    "XAUUSD": "GC=F",   # Gold spot → Gold futures (yFinance reliable)
+    "GOLD":   "GC=F",
+    "XAGUSD": "SI=F",   # Silver spot → Silver futures
+    "SILVER": "SI=F",
+    "XPTUSD": "PL=F",   # Platinum
+    "PLATINUM": "PL=F",
+    "XPDUSD": "PA=F",   # Palladium
+    # Energy
+    "WTIUSD":  "CL=F",  # WTI Crude
+    "USOIL":   "CL=F",
+    "OIL":     "CL=F",
+    "WTI":     "CL=F",
+    "BCOUSD":  "BZ=F",  # Brent Crude
+    "UKOIL":   "BZ=F",
+    "BRENT":   "BZ=F",
+    "NGAS":    "NG=F",  # Natural Gas
+    "NATGAS":  "NG=F",
+    "GASOIL":  "HO=F",  # Heating oil
+    # Base metals
+    "COPPER":  "HG=F",
+    "HGUSD":   "HG=F",
+    # Agriculturals
+    "CORN":    "ZC=F",
+    "WHEAT":   "ZW=F",
+    "SOYBEAN": "ZS=F",
+    "COFFEE":  "KC=F",
+    "SUGAR":   "SB=F",
+    "COCOA":   "CC=F",
+    "COTTON":  "CT=F",
+}
+
 def format_ticker(raw_ticker, market):
     """Auto-add suffix based on selected market. Idempotent."""
     t = raw_ticker.strip().upper()
@@ -60,15 +97,17 @@ def format_ticker(raw_ticker, market):
 
     # Smart suffix logic per market
     if market == "Commodity":
-        # XAUUSD/XAGUSD/etc (6-letter ending in currency code) → spot pair → =X
+        # PRIORITY 1: Known alias map (XAUUSD→GC=F because yFinance spot data unreliable)
+        if t in COMMODITY_ALIAS:
+            return COMMODITY_ALIAS[t]
+        # PRIORITY 2: 5+ letter ending in currency code = spot pair (try =X for less common pairs)
         currency_endings = ("USD","EUR","JPY","GBP","CHF","AUD","CAD","CNY","SGD","HKD")
         if len(t) >= 5 and t.endswith(currency_endings):
             return f"{t}=X"
-        # Strictly 2-letter alpha = common futures code (GC, SI, CL, HG, NG, ES, NQ, ZC, ZS, etc.)
-        # 3+ letters left alone: avoid catching ETFs (GLD, IAU, USO, SLV, DBA, USL...)
+        # PRIORITY 3: Exactly 2 letters alpha = futures code (GC, SI, CL, HG, NG, ES, NQ, etc.)
         if len(t) == 2 and t.isalpha():
             return f"{t}=F"
-        # Else = ETF, stock-like, or full yFinance format → no suffix
+        # FALLBACK: 3+ letter codes = ETF or stock-like (GLD, IAU, USO, SLV, DBA) → no suffix
         return t
 
     suffix = MARKET_SUFFIX.get(market, "")
@@ -632,10 +671,18 @@ with col_k:
 
 # Auto-format ticker for display
 ticker_formatted = format_ticker(ticker_raw, market)
+
+# Check if commodity alias remap happened (for user transparency)
+remap_note = ""
+raw_upper = ticker_raw.strip().upper()
+if market == "Commodity" and raw_upper in COMMODITY_ALIAS:
+    remap_note = f' <span style="color:#ffb700; font-size:10px;">⚡ auto-remapped from <code>{raw_upper}</code> — yFinance data lebih reliable di futures</span>'
+
 st.markdown(f"""
 <div style="font-size:11px; color:#8b95a8; margin-top:-8px;">
     Resolved ticker: <code style="color:#00ff88; background:#0d1421; padding:2px 6px; border-radius:3px;">{ticker_formatted}</code>
     · Default T1 for {primary_tf}: <code style="color:#4da6ff;">{TF_CONFIG[primary_tf]['default_T1']}</code> bars
+    {remap_note}
 </div>
 """, unsafe_allow_html=True)
 
