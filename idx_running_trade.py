@@ -1697,6 +1697,24 @@ with tab_idx:
             </div>
             """, unsafe_allow_html=True)
 
+    # Multi-TF Coverage selector (only relevant in multi-TF mode)
+    if is_multi_tf:
+        cov_label = st.radio(
+            "Stage 2 Coverage — berapa kandidat dari Stage 1 yang di-deep-dive multi-TF",
+            ["⚡ Top 100 (~2 menit)", "📊 Top 300 (~5 menit)", "🔥 Top 500 (~8 menit)", "💎 ALL 981 saham (~15 menit)"],
+            index=0, horizontal=True, key="idx_coverage",
+            help="Stage 1 selalu scan semua 981. Stage 2 (multi-TF) cuma deep-dive top N kandidat dari Stage 1. Lebih banyak = lebih komprehensif tapi lebih lama."
+        )
+        coverage_map = {
+            "⚡ Top 100 (~2 menit)": 100,
+            "📊 Top 300 (~5 menit)": 300,
+            "🔥 Top 500 (~8 menit)": 500,
+            "💎 ALL 981 saham (~15 menit)": 981,
+        }
+        idx_coverage_n = coverage_map[cov_label]
+    else:
+        idx_coverage_n = 100  # not used in quick mode
+
     # Settings row
     ic1, ic2, ic3, ic4, ic5 = st.columns([2, 2, 2, 1, 1.5])
     with ic1:
@@ -1750,7 +1768,7 @@ with tab_idx:
         if is_multi_tf:
             with st.spinner("Multi-TF Scan: 2-stage analysis (1H + 15m + 5m)..."):
                 res, stats = scan_idx_multi_tf(
-                    stage1_min_prob=0.52, top_n_stage2=100, k=idx_k,
+                    stage1_min_prob=0.52, top_n_stage2=idx_coverage_n, k=idx_k,
                     min_stars=idx_min_stars, direction_filter=idx_dir,
                     workers=6, progress_cb=_pcb
                 )
