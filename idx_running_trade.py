@@ -935,23 +935,81 @@ def analyze_multi_tf(ticker, k=20, market="IDX (Indonesia)"):
 def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
                        min_stars=1, direction_filter="ALL", workers=6, progress_cb=None):
     """
-    Two-stage scanner: fast 15m scan first, then multi-TF deep dive on top candidates.
+    Multi-TF scanner with 2 modes:
+    • FULL UNIVERSE (top_n_stage2 >= 981): bypass Stage 1, multi-TF analyze all tickers
+    • 2-STAGE (default): fast 15m pre-screen → multi-TF deep dive on top N
     Returns final results sorted by multi-TF score.
     """
-    # STAGE 1: Fast 15m scan (~30-60s)
-    if progress_cb: progress_cb(0, 100, "stage1_fetch")
+    n_idx_total = len(IDX_TICKERS)
+    full_universe_mode = top_n_stage2 >= n_idx_total
+
+    if full_universe_mode:
+        # ── FULL UNIVERSE MODE ── multi-TF analyze ALL 981 directly (no pre-screen)
+        if progress_cb: progress_cb(0, n_idx_total, "fullscan_init")
+        tickers_yf = [f"{t}.JK" for t in IDX_TICKERS]
+        random.shuffle(tickers_yf)  # avoid yFinance pattern detection
+
+        final_results = []
+        stage2_skip = {"no_multi_data": 0, "below_stars": 0, "wrong_dir": 0}
+
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(analyze_multi_tf, t, k=k): t for t in tickers_yf}
+            for i, f in enumerate(as_completed(futures)):
+                t = futures[f]
+                if progress_cb and i % 3 == 0:
+                    progress_cb(i+1, n_idx_total, "fullscan_multi_tf")
+                try: mtf = f.result()
+                except Exception:
+                    stage2_skip["no_multi_data"] += 1; continue
+                if mtf is None or mtf.get("error"):
+                    stage2_skip["no_multi_data"] += 1; continue
+
+                mscore = mtf["multi_tf"]
+                if mscore["stars"] < min_stars:
+                    stage2_skip["below_stars"] += 1; continue
+                if direction_filter != "ALL" and mscore["direction"] != direction_filter:
+                    stage2_skip["wrong_dir"] += 1; continue
+
+                final_results.append({
+                    "ticker":      t.replace(".JK", ""),
+                    "ticker_yf":   t,
+                    "price":       mtf["price"],
+                    "change_pct":  mtf["change_pct"],
+                    "atr":         mtf["atr"],
+                    "multi_tf":    mscore,
+                    "tf_results":  mtf["tf_results"],
+                    "entry":       mtf["entry"],
+                    "trend":       mtf["trend_regime"],
+                    "vol":         mtf["vol_regime"],
+                })
+
+        final_results.sort(key=lambda r: r["multi_tf"]["score"], reverse=True)
+        return final_results, {
+            "mode": "full_universe",
+            "stage1_total": n_idx_total,
+            "stage1_passed": n_idx_total,  # all bypass into stage 2
+            "stage1_skip": {},
+            "stage2_candidates": n_idx_total,
+            "stage2_passed": len(final_results),
+            "stage2_skip": stage2_skip,
+        }
+
+    # ── 2-STAGE MODE ── fast pre-screen then multi-TF on top N
+    # STAGE 1: Fast 15m scan (~30-60s). Pass REAL counts (not percentage) to UI.
+    if progress_cb: progress_cb(0, n_idx_total, "stage1_init")
     stage1, stage1_skip = scan_idx_universe(
         timeframe="15m", k=k, min_prob=stage1_min_prob,
         direction_filter="ALL",  # don't filter direction yet
-        workers=workers, progress_cb=lambda d,t,p: progress_cb(int(d/t*50), 100, f"stage1_{p}") if progress_cb else None
+        workers=workers,
+        progress_cb=(lambda d, t, p: progress_cb(d, t, f"stage1_{p}")) if progress_cb else None
     )
 
     # Take top N candidates by directional strength
     candidates = stage1[:top_n_stage2]
     n_cands = len(candidates)
     if not candidates:
-        return [], {"stage1_total": len(IDX_TICKERS), "stage1_passed": 0, "stage2_passed": 0,
-                    "stage1_skip": stage1_skip}
+        return [], {"mode": "2_stage", "stage1_total": n_idx_total,
+                    "stage1_passed": 0, "stage2_passed": 0, "stage1_skip": stage1_skip}
 
     # STAGE 2: Multi-TF analysis on candidates only (~30-60s)
     final_results = []
@@ -961,10 +1019,9 @@ def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
         futures = {ex.submit(analyze_multi_tf, c["ticker_yf"], k=k): c for c in candidates}
         for i, f in enumerate(as_completed(futures)):
             c = futures[f]
-            if progress_cb and i % 5 == 0:
-                progress_cb(50 + int(i/n_cands*50), 100, "stage2_multi_tf")
-            try:
-                mtf = f.result()
+            if progress_cb and i % 3 == 0:
+                progress_cb(i+1, n_cands, "stage2_multi_tf")
+            try: mtf = f.result()
             except Exception:
                 stage2_skip["no_multi_data"] += 1; continue
             if mtf is None or mtf.get("error"):
@@ -973,7 +1030,6 @@ def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
             mscore = mtf["multi_tf"]
             if mscore["stars"] < min_stars:
                 stage2_skip["below_stars"] += 1; continue
-
             if direction_filter != "ALL" and mscore["direction"] != direction_filter:
                 stage2_skip["wrong_dir"] += 1; continue
 
@@ -994,6 +1050,7 @@ def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
     final_results.sort(key=lambda r: r["multi_tf"]["score"], reverse=True)
 
     return final_results, {
+        "mode": "2_stage",
         "stage1_total": len(IDX_TICKERS),
         "stage1_passed": len(stage1),
         "stage1_skip": stage1_skip,
@@ -1756,14 +1813,29 @@ with tab_idx:
     if idx_scan_btn:
         prog = st.progress(0, text="Initializing scan...")
         def _pcb(done, total, phase):
-            phase_label = {
-                "fetching": "📥 FETCH stage 1",
-                "analyzing": "🧮 ANALYZE stage 1",
-                "stage1_fetching": "📥 STAGE 1 fetch",
-                "stage1_analyzing": "🧮 STAGE 1 analyze",
-                "stage2_multi_tf": "★ STAGE 2 multi-TF confluence",
-            }.get(phase, phase.upper())
-            prog.progress(min(done/total, 1.0), text=f"{phase_label}: {done}/{total}")
+            # Map phase to display text + bar percentage
+            if phase.startswith("stage1_"):
+                # Stage 1: 0-50% of overall bar
+                pct = min((done/total)*0.5, 0.5) if total > 0 else 0
+                action = "fetching" if "fetch" in phase else "analyzing"
+                text = f"📥 STAGE 1 ({action} all {total} IDX): {done}/{total} ({int(done/total*100) if total else 0}%)"
+            elif phase == "stage2_multi_tf":
+                # Stage 2: 50-100% of overall bar
+                pct = 0.5 + min((done/total)*0.5, 0.5) if total > 0 else 0.5
+                text = f"★ STAGE 2 multi-TF: {done}/{total} candidates ({int(done/total*100) if total else 0}%)"
+            elif phase in ("fullscan_multi_tf", "fullscan_init"):
+                # Full universe mode: single 0-100% bar
+                pct = done/total if total > 0 else 0
+                text = f"💎 FULL UNIVERSE multi-TF: {done}/{total} ({int(done/total*100) if total else 0}%)"
+            elif phase in ("fetching", "analyzing"):
+                # Quick (single-TF) mode
+                pct = done/total if total > 0 else 0
+                action = "FETCH" if phase == "fetching" else "ANALYZE"
+                text = f"📥 {action}: {done}/{total} ({int(done/total*100) if total else 0}%)"
+            else:
+                pct = done/total if total else 0
+                text = f"{phase}: {done}/{total}"
+            prog.progress(pct, text=text)
 
         if is_multi_tf:
             with st.spinner("Multi-TF Scan: 2-stage analysis (1H + 15m + 5m)..."):
@@ -1897,15 +1969,18 @@ with tab_idx:
 
         # Stats
         with st.expander("📊 Multi-TF scan breakdown"):
+            mode_label = "💎 FULL UNIVERSE (bypassed Stage 1 filter)" if mtf_stats.get("mode")=="full_universe" else "📊 2-STAGE (Quick pre-screen → Multi-TF confirm)"
             st.markdown(f"""
+            **Scan mode:** {mode_label}
+
             **Stage 1 (15m pre-screen):**
-            - Total IDX stocks: {mtf_stats.get('stage1_total', 0)}
+            - Total IDX stocks scanned: {mtf_stats.get('stage1_total', 0)}
             - Passed initial threshold: {mtf_stats.get('stage1_passed', 0)}
             - Skip reasons: {mtf_stats.get('stage1_skip', {})}
 
             **Stage 2 (Multi-TF confirmation):**
-            - Top candidates analyzed: {mtf_stats.get('stage2_candidates', 0)}
-            - Passed multi-TF filter: {mtf_stats.get('stage2_passed', 0)}
+            - Candidates analyzed multi-TF: {mtf_stats.get('stage2_candidates', 0)}
+            - Passed multi-TF filter (≥ Min Stars): {mtf_stats.get('stage2_passed', 0)}
             - Skip reasons: {mtf_stats.get('stage2_skip', {})}
             """)
 
