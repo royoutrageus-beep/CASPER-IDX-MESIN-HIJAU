@@ -806,7 +806,12 @@ def _analyze_one_tf(df, tf_name, k_req=20):
         return None
 
 def compute_multi_tf_score(tf_results):
-    """Aggregate per-TF probabilities → Multi-TF Decision Score (0-100, stars 0-4)."""
+    """Aggregate per-TF probabilities → Multi-TF Decision Score (0-100, stars 0-4).
+    
+    REVISED formula (v1.2.1): additive bonus instead of multiplicative penalty.
+    Old formula penalized even fully-aligned mild signals (kept under threshold).
+    New: agreement & confidence give explicit bonus points → more signals get rated.
+    """
     valid_tfs = [tf for tf in MULTI_TF_CONFIG["tfs"] if tf_results.get(tf) is not None]
     if not valid_tfs:
         return {"score": 0, "stars": 0, "direction": "NO DATA",
@@ -816,27 +821,30 @@ def compute_multi_tf_score(tf_results):
     w = MULTI_TF_CONFIG["weights"]
     total_w = sum(w[tf] for tf in valid_tfs)
 
-    # Weighted signal: each TF's directional vector
+    # Weighted directional signal (-1 to +1, range usually -0.5 to +0.5)
     avg_signal = sum((tf_results[tf]["prob"] - 0.5) * 2 * w[tf]
                      for tf in valid_tfs) / total_w
     avg_conf = sum(tf_results[tf]["conf"] * w[tf]
                     for tf in valid_tfs) / total_w
 
-    # Agreement: are all valid TFs same direction?
+    # Agreement: how many TFs same sign?
     signs = [np.sign(tf_results[tf]["prob"] - 0.5) for tf in valid_tfs]
     agreement = abs(sum(signs)) / len(signs) if signs else 0
 
-    # Final score
+    # ── NEW SCORING (additive) ──
     strength = abs(avg_signal)
-    raw_score = strength * 100
-    adj_score = raw_score * (0.5 + 0.5 * agreement) * (0.5 + 0.5 * avg_conf)
+    raw_score = strength * 100         # 0-100 (signal magnitude)
+    bonus_agreement = agreement * 30   # max +30 untuk full alignment
+    bonus_conf = avg_conf * 20         # max +20 untuk high confidence
+    baseline_offset = 10               # subtract to avoid inflating pure noise
+    adj_score = max(0, min(100, raw_score + bonus_agreement + bonus_conf - baseline_offset))
 
-    # Direction (require meaningful signal to commit)
-    if avg_signal > 0.10:    direction = "LONG"
-    elif avg_signal < -0.10: direction = "SHORT"
+    # More permissive direction threshold (0.10 → 0.04)
+    if avg_signal > 0.04:    direction = "LONG"
+    elif avg_signal < -0.04: direction = "SHORT"
     else:                     direction = "WAIT"
 
-    # Stars rating
+    # Stars rating (recalibrated for new score range)
     if direction == "WAIT":
         stars, label, color = 0, "WAIT", "#ffb700"
     elif adj_score >= 65 and agreement >= 0.99:
@@ -847,7 +855,7 @@ def compute_multi_tf_score(tf_results):
         color = "#00ff88" if direction == "LONG" else "#ff3d5a"
     elif adj_score >= 35 and agreement >= 0.33:
         stars, label, color = 2, "MONITOR", "#4da6ff"
-    elif adj_score >= 20:
+    elif adj_score >= 15:
         stars, label, color = 1, "WEAK", "#ffb700"
     else:
         stars, label, color = 0, "WAIT", "#ffb700"
@@ -883,7 +891,12 @@ def analyze_multi_tf(ticker, k=20, market="IDX (Indonesia)"):
     score = compute_multi_tf_score(tf_results)
 
     # Entry levels: use 15m if available (intraday standard), else fallback
-    primary_df = data.get("15m") or data.get("1h") or data.get("5m")
+    # FIX: can't use `or` chain on DataFrames (ambiguous truth value crash)
+    primary_df = None
+    for _tf in ("15m", "1h", "5m"):
+        _df = data.get(_tf)
+        if _df is not None and len(_df) > 0:
+            primary_df = _df; break
     if primary_df is None:
         return {"error": f"Tidak ada data fetchable untuk {ticker} di TF apapun"}
 
@@ -891,8 +904,12 @@ def analyze_multi_tf(ticker, k=20, market="IDX (Indonesia)"):
     p15_prob = tf_results.get("15m", {}).get("prob", 0.5) if tf_results.get("15m") else 0.5
     entry = compute_entry_levels(primary_df, score["direction"], p15_prob) if score["direction"] != "WAIT" else None
 
-    # Regime: prefer 1H view (most stable)
-    regime_df = data.get("1h") or data.get("15m") or data.get("5m")
+    # Regime: prefer 1H view (most stable). FIX: explicit None check, no DataFrame `or`.
+    regime_df = None
+    for _tf in ("1h", "15m", "5m"):
+        _df = data.get(_tf)
+        if _df is not None and len(_df) > 0:
+            regime_df = _df; break
     if regime_df is not None:
         trend_regime, trend_color = detect_trend_regime(regime_df)
         vol_regime, vol_color = detect_volatility_regime(regime_df)
@@ -915,8 +932,8 @@ def analyze_multi_tf(ticker, k=20, market="IDX (Indonesia)"):
         "atr": float(compute_atr(primary_df, 14).iloc[-1]) if len(primary_df) >= 15 else 0,
     }
 
-def scan_idx_multi_tf(stage1_min_prob=0.55, top_n_stage2=80, k=20,
-                       min_stars=2, direction_filter="ALL", workers=6, progress_cb=None):
+def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
+                       min_stars=1, direction_filter="ALL", workers=6, progress_cb=None):
     """
     Two-stage scanner: fast 15m scan first, then multi-TF deep dive on top candidates.
     Returns final results sorted by multi-TF score.
@@ -1733,7 +1750,7 @@ with tab_idx:
         if is_multi_tf:
             with st.spinner("Multi-TF Scan: 2-stage analysis (1H + 15m + 5m)..."):
                 res, stats = scan_idx_multi_tf(
-                    stage1_min_prob=0.55, top_n_stage2=80, k=idx_k,
+                    stage1_min_prob=0.52, top_n_stage2=100, k=idx_k,
                     min_stars=idx_min_stars, direction_filter=idx_dir,
                     workers=6, progress_cb=_pcb
                 )
