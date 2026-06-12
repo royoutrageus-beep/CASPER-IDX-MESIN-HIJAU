@@ -191,6 +191,114 @@ IDX_TICKERS = [
     "ZYRX",
 ]
 
+# ─── US TICKER UNIVERSE (583 stocks for multi-scan) ───────────────
+US_TICKERS = [
+    "AAPL","MSFT","GOOGL","GOOG","AMZN","NVDA","META","TSLA","AVGO","ORCL",
+    "BRK-B","JPM","V","WMT","XOM","LLY","MA","JNJ","UNH","PG",
+    "HD","CVX","ABBV","KO","MRK","COST","BAC","CRM","TMO","PEP",
+    "WFC","ADBE","CSCO","ABT","ACN","NFLX","DIS","MCD","LIN","DHR",
+    "TXN","NEE","VZ","CMCSA","RTX","PM","UPS","NKE","INTU","T",
+    "AMD","QCOM","HON","LOW","PFE","COP","IBM","UNP","INTC","ELV",
+    "SPGI","BMY","CAT","DE","GE","SBUX","BA","BLK","AMAT","BKNG",
+    "GILD","AMGN","NOW","ISRG","SYK","LMT","MDT","ADI","PLD","TJX",
+    "VRTX","AXP","C","SCHW","CB","REGN","ADP","MMC","ZTS","GS",
+    "PYPL","MO","CI","SLB","BDX","FI","CL","SO","TGT","DUK",
+    "TSM","ASML","MU","LRCX","KLAC","MRVL","NXPI","MCHP","ON","SWKS",
+    "STM","WDC","STX","ENTG","AMKR","FORM","UCTT","ACLS","SIMO","HIMX",
+    "SHOP","SQ","UBER","LYFT","ABNB","DASH","SNAP","PINS","TWTR","RBLX",
+    "U","NET","DDOG","SNOW","CRWD","ZS","PANW","FTNT","OKTA","MDB",
+    "TEAM","WDAY","HUBS","ZM","DOCU","TWLO","PATH","AI","SMCI","PLTR",
+    "C3AI","SOUN","BBAI","UPST","ASAN","ESTC","CFLT","S","GTLB","RIVN",
+    "LCID","NIO","XPEV","LI","CHPT","BLNK","QS","SLDP","FSR","WKHS",
+    "NKLA","HYZN","PLUG","FCEL","BE","ALB","SQM","LAC","BABA","JD",
+    "PDD","BIDU","NTES","BILI","TCEHY","TME","BEKE","TAL","EDU","IQ",
+    "HUYA","DOYU","GDS","VIPS","YMM","MRNA","BNTX","BIIB","ILMN","ALNY",
+    "SGEN","INCY","BMRN","EXEL","TECH","CRSP","NTLA","BEAM","EDIT","SANA",
+    "BLUE","RPRX","JAZZ","CVS","HUM","ANTM","ALXN","NVAX","MS","ICE",
+    "CME","BX","KKR","APO","CG","COIN","HOOD","SOFI","AFRM","MKTX",
+    "NDAQ","TROW","STT","BK","FIS","FISV","GPN","WU","EOG","OXY",
+    "PXD","MPC","VLO","PSX","HES","DVN","FANG","APA","CTRA","MRO",
+    "KMI","WMB","ENB","ET","TPL","HAL","BKR","NOV","RIG","NE",
+    "VAL","TS","NEX","WHD","TM","CMG","ORLY","AZO","ROST","LULU",
+    "BURL","DPZ","YUM","DRI","GM","F","HOG","CARG","CVNA","KMX",
+    "AN","KMB","GIS","K","HSY","STZ","TAP","SAM","DEO","BUD",
+    "KDP","MNST","CHD","CLX","ENR","TMUS","CHTR","WBD","FOX","FOXA",
+    "NWS","NWSA","PARA","SIRI","LSXMA","LSXMK","FDX","NOC","GD","TXT",
+    "EMR","ETN","ITW","PH","CMI","ROK","DOV","FTV","XYL","AME",
+    "WM","RSG","WCN","CSX","NSC","CHRW","JBHT","EXPD","ODFL","AMT",
+    "CCI","EQIX","DLR","O","SPG","WELL","PSA","EXR","AVB","EQR",
+    "ESS","INVH","SBAC","ARE","VTR","VICI","HST","REG","CEG","SRE",
+    "AEP","D","PCG","EXC","XEL","PEG","ED","APD","SHW","FCX",
+    "NEM","NUE","STLD","DOW","DD","ECL","PPG","GOLD","AEM","KGC",
+    "AG","PAAS","HL","CDE","WPM","FNV","RGLD","X","CLF","MT",
+    "RIO","BHP","VALE","SCCO","TECK","MSTR","MARA","RIOT","CLSK","HUT",
+    "BITF","CIFR","CAN","BTBT","WULF","HIVE","DGHI","NCTY","BTCS","SOS",
+    "EBON","CIPHER","GME","AMC","BB","NOK","WISH","CLOV","SPCE","TLRY",
+    "CGC","CRON","ACB","HEXO","SNDL","CURLF","TCNNF","GTBIF","VFF","DWAC",
+    "CFVI","PHUN","BBBY","ATER","BBIG","PROG","MULN","FFIE","HKD","HII",
+    "KTOS","AVAV","LHX","TDG","HEI","ESLT","BWXT","CW","MRCY","LDOS",
+    "SAIC","BAH","CACI","MAR","HLT","H","IHG","WH","CHH","RCL",
+    "CCL","NCLH","UAL","DAL","AAL","LUV","ALK","JBLU","HA","SAVE",
+    "ALGT","MGM","WYNN","LVS","CZR","DKNG","PENN","BYD","CHDN","RRR",
+    "FLL","CYBR","TENB","RPD","FEYE","ENPH","SEDG","FSLR","RUN","NOVA",
+    "SPWR","CSIQ","JKS","ARRY","SHLS","BLDP","HYG","BEPC","TAN","ICLN",
+    "QCLN","ETSY","EBAY","W","CHWY","MELI","AFFIRM","ROKU","PLBY","SKLZ",
+    "OPEN","Z","RDFN","WBA","KSS","M","JWN","GPS","BIG","DLTR",
+    "FIVE","OLLI","ULTA","BBWI","TPR","CPRI","RL","LEVI","PVH","HBI",
+    "UAA","CROX","ONON","SPY","QQQ","IWM","DIA","VTI","VOO","VEA",
+    "VWO","BND","TLT","GLD","SLV","USO","UNG","DBC","DBA","XLE",
+    "XLF","XLK","XLV","XLI","XLY","XLP","XLU","XLB","XLRE","XLC",
+    "ARKK","ARKG","ARKW","ARKQ","ARKF","SOXX","SMH","IBB","XBI","KRE",
+    "KBE","XOP","OIH","TQQQ","SQQQ","SOXL","SOXS","TNA","TZA","UPRO",
+    "SPXS","UDOW","SDOW","VXX","UVXY","SVXY","SVOL","JEPI","JEPQ","SCHD",
+    "DGRO","VYM","DVY",
+]
+
+# ─── CRYPTO TICKER UNIVERSE (208 coins for multi-scan) ────────────
+CRYPTO_TICKERS = [
+    "BTC-USD","ETH-USD","BNB-USD","SOL-USD","XRP-USD","ADA-USD","DOGE-USD","AVAX-USD","TRX-USD","TON11419-USD",
+    "LINK-USD","DOT-USD","NEAR-USD","MATIC-USD","ICP-USD","SHIB-USD","LTC-USD","BCH-USD","UNI7083-USD","XLM-USD",
+    "HBAR-USD","ETC-USD","ATOM-USD","XMR-USD","ALGO-USD","FTM-USD","EGLD-USD","FLOW-USD","KAS-USD","KAVA-USD",
+    "INJ-USD","SEI-USD","SUI-USD","APT21794-USD","MINA-USD","ROSE-USD","ONE-USD","IOTA-USD","ZIL-USD","NEO-USD",
+    "WAVES-USD","ICX-USD","QTUM-USD","ONT-USD","CKB-USD","XTZ-USD","EOS-USD","ARB11841-USD","OP-USD","IMX10603-USD",
+    "MNT-USD","STRK22691-USD","METIS-USD","BOBA-USD","LRC-USD","SKL-USD","MASK-USD","ZRO-USD","AAVE-USD","MKR-USD",
+    "COMP5692-USD","SNX-USD","SUSHI-USD","CRV-USD","BAL-USD","YFI-USD","DYDX-USD","GMX-USD","1INCH-USD","CAKE-USD",
+    "KNC-USD","BAND-USD","RUNE-USD","OSMO-USD","STX4847-USD","JUP29210-USD","RAY-USD","JTO-USD","PYTH-USD","PEPE24478-USD",
+    "FLOKI-USD","BONK-USD","WIF-USD","MEME28301-USD","BRETT29743-USD","BOOK-USD","TURBO24911-USD","MEW-USD","POPCAT-USD","NEIRO-USD",
+    "PNUT-USD","GOAT-USD","ACT-USD","ZEC-USD","DASH-USD","FIRO-USD","BEAM-USD","SCRT-USD","DERO-USD","FIL-USD",
+    "AR-USD","SC-USD","BTT-USD","RNDR-USD","AKT-USD","THETA-USD","GRT6719-USD","STORJ-USD","HOT-USD","ANKR-USD",
+    "API3-USD","FET-USD","AGIX-USD","OCEAN-USD","TAO22974-USD","IO29796-USD","WLD-USD","NMR-USD","CTXC-USD","NUM-USD",
+    "ATH-USD","SAND-USD","MANA-USD","AXS-USD","ENJ-USD","GALA-USD","GAL-USD","MAGIC-USD","PRIME-USD","BIGTIME-USD",
+    "SUPER8290-USD","ALICE-USD","SLP-USD","ILV-USD","YGG-USD","UFO-USD","VRA-USD","PIXEL-USD","MAVIA-USD","XAI28200-USD",
+    "APE18876-USD","BLUR-USD","LOOKS-USD","DEGEN-USD","CTSI-USD","CHZ-USD","WAX-USD","AUDIO-USD","FRIEND-USD","OKB-USD",
+    "KCS-USD","BGB-USD","GT-USD","CRO-USD","FTT-USD","LEO-USD","HT-USD","MX-USD","TRB-USD","UMA-USD",
+    "DIA-USD","HNT-USD","IOTX-USD","HONEY-USD","JASMY-USD","ONDO-USD","POLYX-USD","ORDI-USD","SATS29796-USD","PUPS-USD",
+    "WBTC-USD","TNSR-USD","WEN-USD","PYUSD-USD","TIA22861-USD","CELESTIA-USD","USDT-USD","USDC-USD","DAI-USD","USDS33039-USD",
+    "FDUSD-USD","DYM-USD","ENA-USD","ETHFI-USD","ALT-USD","MANTA-USD","SAGA32859-USD","OMNI-USD","AEVO-USD","TAIKO-USD",
+    "ZKL-USD","ZK-USD","BB31254-USD","NOT32457-USD","SUNDOG-USD","CATI-USD","WETH-USD","CBETH-USD","STETH-USD","RETH-USD",
+    "LDO-USD","RPL-USD","ENS-USD","FRAX-USD","FXS-USD","CVX-USD","ETHX-USD","SWELL-USD",
+]
+
+# ─── MARKET CONFIGS for multi-scan (used by scan_market_*) ────────
+MARKET_CONFIGS = {
+    "IDX": {
+        "tickers": IDX_TICKERS, "suffix": ".JK",
+        "label": "IDX (Indonesia)", "flag": "🇮🇩", "name": "IDX",
+        "currency_fn": lambda p: f"Rp {p:,.0f}",
+    },
+    "US": {
+        "tickers": US_TICKERS, "suffix": "",
+        "label": "US Stocks", "flag": "🇺🇸", "name": "US",
+        "currency_fn": lambda p: f"${_pf(p)}",
+    },
+    "Crypto": {
+        "tickers": CRYPTO_TICKERS, "suffix": "-USD",
+        "label": "Crypto", "flag": "₿", "name": "Crypto",
+        "currency_fn": lambda p: f"${_pf(p)}",
+    },
+}
+
+
 def format_ticker(raw_ticker, market):
     """Auto-add suffix based on selected market. Idempotent."""
     t = raw_ticker.strip().upper()
@@ -693,16 +801,19 @@ def _idx_analyze_one(df, T1, tau_bars, tau_labels, h_bars, h_label, k_req, scale
     except Exception:
         return None
 
-def scan_idx_universe(timeframe="15m", T1=None, k=20, min_prob=0.55,
-                       direction_filter="ALL", workers=6, progress_cb=None):
+def scan_market_universe(market_key="IDX", timeframe="15m", T1=None, k=20, min_prob=0.55,
+                          direction_filter="ALL", workers=6, progress_cb=None):
     """
-    Scan all 981 IDX stocks. Returns (results_list, skip_reasons_dict).
-    Each result includes ticker, price, probability, direction, entry levels.
+    Generic universe scanner — works for IDX/US/Crypto.
+    market_key picks ticker list, suffix, and currency from MARKET_CONFIGS.
+    Returns (results_list, skip_reasons_dict).
     """
+    mcfg = MARKET_CONFIGS[market_key]
     cfg = TF_CONFIG[timeframe]
     if T1 is None: T1 = cfg["default_T1"]
 
-    tickers_yf = [f"{t}.JK" for t in IDX_TICKERS]
+    suffix = mcfg["suffix"]
+    tickers_yf = [f"{t}{suffix}" if suffix else t for t in mcfg["tickers"]]
     random.shuffle(tickers_yf)  # avoid pattern detection by yFinance
     n_total = len(tickers_yf)
 
@@ -742,18 +853,27 @@ def scan_idx_universe(timeframe="15m", T1=None, k=20, min_prob=0.55,
         if direction_filter != "ALL" and result["direction"] != direction_filter:
             skip["wrong_dir"] += 1; continue
 
-        # Probability filter — distance from 0.5 (both LONG and SHORT directions)
-        prob_strength = abs(result["prob"] - 0.5) + 0.5  # convert to "directional probability"
+        # Probability filter — distance from 0.5
+        prob_strength = abs(result["prob"] - 0.5) + 0.5
         if prob_strength < min_prob:
             skip["low_prob"] += 1; continue
 
-        result["ticker"] = t_yf.replace(".JK", "")
+        # Display ticker: strip suffix if any
+        display = t_yf.replace(suffix, "") if suffix else t_yf
+        result["ticker"] = display
         result["ticker_yf"] = t_yf
+        result["market_key"] = market_key
         results.append(result)
 
     # Sort by absolute distance from 0.5 (strongest signals first)
     results.sort(key=lambda r: abs(r["prob"] - 0.5), reverse=True)
     return results, skip
+
+# Backward-compat wrapper
+def scan_idx_universe(timeframe="15m", T1=None, k=20, min_prob=0.55,
+                       direction_filter="ALL", workers=6, progress_cb=None):
+    return scan_market_universe("IDX", timeframe, T1, k, min_prob,
+                                 direction_filter, workers, progress_cb)
 
 # ════════════════════════════════════════════════════════════════════
 #  MULTI-TF DECISION ENGINE — Combine 1H + 15m + 5m into single signal
@@ -932,32 +1052,33 @@ def analyze_multi_tf(ticker, k=20, market="IDX (Indonesia)"):
         "atr": float(compute_atr(primary_df, 14).iloc[-1]) if len(primary_df) >= 15 else 0,
     }
 
-def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
-                       min_stars=1, direction_filter="ALL", workers=6, progress_cb=None):
+def scan_market_multi_tf(market_key="IDX", stage1_min_prob=0.52, top_n_stage2=100, k=20,
+                          min_stars=1, direction_filter="ALL", workers=6, progress_cb=None):
     """
-    Multi-TF scanner with 2 modes:
-    • FULL UNIVERSE (top_n_stage2 >= 981): bypass Stage 1, multi-TF analyze all tickers
-    • 2-STAGE (default): fast 15m pre-screen → multi-TF deep dive on top N
-    Returns final results sorted by multi-TF score.
+    Multi-TF scanner for any market (IDX/US/Crypto).
+    • FULL UNIVERSE (top_n_stage2 >= total): bypass Stage 1, multi-TF analyze all
+    • 2-STAGE: fast 15m pre-screen → multi-TF deep dive on top N
     """
-    n_idx_total = len(IDX_TICKERS)
-    full_universe_mode = top_n_stage2 >= n_idx_total
+    mcfg = MARKET_CONFIGS[market_key]
+    suffix = mcfg["suffix"]
+    n_total = len(mcfg["tickers"])
+    full_universe_mode = top_n_stage2 >= n_total
 
     if full_universe_mode:
-        # ── FULL UNIVERSE MODE ── multi-TF analyze ALL 981 directly (no pre-screen)
-        if progress_cb: progress_cb(0, n_idx_total, "fullscan_init")
-        tickers_yf = [f"{t}.JK" for t in IDX_TICKERS]
-        random.shuffle(tickers_yf)  # avoid yFinance pattern detection
+        # FULL UNIVERSE MODE — bypass Stage 1
+        if progress_cb: progress_cb(0, n_total, "fullscan_init")
+        tickers_yf = [f"{t}{suffix}" if suffix else t for t in mcfg["tickers"]]
+        random.shuffle(tickers_yf)
 
         final_results = []
         stage2_skip = {"no_multi_data": 0, "below_stars": 0, "wrong_dir": 0}
 
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futures = {ex.submit(analyze_multi_tf, t, k=k): t for t in tickers_yf}
+            futures = {ex.submit(analyze_multi_tf, t, k=k, market=mcfg["label"]): t for t in tickers_yf}
             for i, f in enumerate(as_completed(futures)):
                 t = futures[f]
                 if progress_cb and i % 3 == 0:
-                    progress_cb(i+1, n_idx_total, "fullscan_multi_tf")
+                    progress_cb(i+1, n_total, "fullscan_multi_tf")
                 try: mtf = f.result()
                 except Exception:
                     stage2_skip["no_multi_data"] += 1; continue
@@ -970,53 +1091,44 @@ def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
                 if direction_filter != "ALL" and mscore["direction"] != direction_filter:
                     stage2_skip["wrong_dir"] += 1; continue
 
+                display = t.replace(suffix, "") if suffix else t
                 final_results.append({
-                    "ticker":      t.replace(".JK", ""),
-                    "ticker_yf":   t,
-                    "price":       mtf["price"],
-                    "change_pct":  mtf["change_pct"],
-                    "atr":         mtf["atr"],
-                    "multi_tf":    mscore,
-                    "tf_results":  mtf["tf_results"],
-                    "entry":       mtf["entry"],
-                    "trend":       mtf["trend_regime"],
-                    "vol":         mtf["vol_regime"],
+                    "ticker": display, "ticker_yf": t,
+                    "price": mtf["price"], "change_pct": mtf["change_pct"],
+                    "atr": mtf["atr"], "multi_tf": mscore,
+                    "tf_results": mtf["tf_results"], "entry": mtf["entry"],
+                    "trend": mtf["trend_regime"], "vol": mtf["vol_regime"],
+                    "market_key": market_key,
                 })
 
         final_results.sort(key=lambda r: r["multi_tf"]["score"], reverse=True)
         return final_results, {
-            "mode": "full_universe",
-            "stage1_total": n_idx_total,
-            "stage1_passed": n_idx_total,  # all bypass into stage 2
-            "stage1_skip": {},
-            "stage2_candidates": n_idx_total,
-            "stage2_passed": len(final_results),
-            "stage2_skip": stage2_skip,
+            "mode": "full_universe", "market_key": market_key,
+            "stage1_total": n_total, "stage1_passed": n_total,
+            "stage1_skip": {}, "stage2_candidates": n_total,
+            "stage2_passed": len(final_results), "stage2_skip": stage2_skip,
         }
 
-    # ── 2-STAGE MODE ── fast pre-screen then multi-TF on top N
-    # STAGE 1: Fast 15m scan (~30-60s). Pass REAL counts (not percentage) to UI.
-    if progress_cb: progress_cb(0, n_idx_total, "stage1_init")
-    stage1, stage1_skip = scan_idx_universe(
-        timeframe="15m", k=k, min_prob=stage1_min_prob,
-        direction_filter="ALL",  # don't filter direction yet
-        workers=workers,
+    # 2-STAGE MODE
+    if progress_cb: progress_cb(0, n_total, "stage1_init")
+    stage1, stage1_skip = scan_market_universe(
+        market_key=market_key, timeframe="15m", k=k, min_prob=stage1_min_prob,
+        direction_filter="ALL", workers=workers,
         progress_cb=(lambda d, t, p: progress_cb(d, t, f"stage1_{p}")) if progress_cb else None
     )
 
-    # Take top N candidates by directional strength
     candidates = stage1[:top_n_stage2]
     n_cands = len(candidates)
     if not candidates:
-        return [], {"mode": "2_stage", "stage1_total": n_idx_total,
-                    "stage1_passed": 0, "stage2_passed": 0, "stage1_skip": stage1_skip}
+        return [], {"mode": "2_stage", "market_key": market_key,
+                    "stage1_total": n_total, "stage1_passed": 0, "stage2_passed": 0,
+                    "stage1_skip": stage1_skip}
 
-    # STAGE 2: Multi-TF analysis on candidates only (~30-60s)
     final_results = []
     stage2_skip = {"no_multi_data": 0, "below_stars": 0, "wrong_dir": 0}
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(analyze_multi_tf, c["ticker_yf"], k=k): c for c in candidates}
+        futures = {ex.submit(analyze_multi_tf, c["ticker_yf"], k=k, market=mcfg["label"]): c for c in candidates}
         for i, f in enumerate(as_completed(futures)):
             c = futures[f]
             if progress_cb and i % 3 == 0:
@@ -1034,40 +1146,39 @@ def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
                 stage2_skip["wrong_dir"] += 1; continue
 
             final_results.append({
-                "ticker":      c["ticker"],
-                "ticker_yf":   c["ticker_yf"],
-                "price":       mtf["price"],
-                "change_pct":  mtf["change_pct"],
-                "atr":         mtf["atr"],
-                "multi_tf":    mscore,
-                "tf_results":  mtf["tf_results"],
-                "entry":       mtf["entry"],
-                "trend":       mtf["trend_regime"],
-                "vol":         mtf["vol_regime"],
+                "ticker": c["ticker"], "ticker_yf": c["ticker_yf"],
+                "price": mtf["price"], "change_pct": mtf["change_pct"],
+                "atr": mtf["atr"], "multi_tf": mscore,
+                "tf_results": mtf["tf_results"], "entry": mtf["entry"],
+                "trend": mtf["trend_regime"], "vol": mtf["vol_regime"],
+                "market_key": market_key,
             })
 
-    # Sort by multi-TF score (best signals first)
     final_results.sort(key=lambda r: r["multi_tf"]["score"], reverse=True)
-
     return final_results, {
-        "mode": "2_stage",
-        "stage1_total": len(IDX_TICKERS),
-        "stage1_passed": len(stage1),
-        "stage1_skip": stage1_skip,
-        "stage2_candidates": n_cands,
-        "stage2_passed": len(final_results),
-        "stage2_skip": stage2_skip,
+        "mode": "2_stage", "market_key": market_key,
+        "stage1_total": n_total, "stage1_passed": len(stage1),
+        "stage1_skip": stage1_skip, "stage2_candidates": n_cands,
+        "stage2_passed": len(final_results), "stage2_skip": stage2_skip,
     }
 
-def send_telegram_multi_tf_batch(top_results):
-    """Send top multi-TF IDX results to Telegram (one message, all per-TF info)."""
+# Backward-compat wrapper
+def scan_idx_multi_tf(stage1_min_prob=0.52, top_n_stage2=100, k=20,
+                       min_stars=1, direction_filter="ALL", workers=6, progress_cb=None):
+    return scan_market_multi_tf("IDX", stage1_min_prob, top_n_stage2, k,
+                                 min_stars, direction_filter, workers, progress_cb)
+
+def send_telegram_multi_tf_batch(top_results, market_key="IDX"):
+    """Send top multi-TF results to Telegram (market-aware: IDX/US/Crypto)."""
     if not TOKEN or not CHAT_ID:
         return False, "Telegram tidak dikonfigurasi"
     if not top_results:
         return False, "Tidak ada signal"
+    mcfg = MARKET_CONFIGS.get(market_key, MARKET_CONFIGS["IDX"])
+    cur_fn = mcfg["currency_fn"]
     now = datetime.now(et_tz); sep = "━" * 28
     body = (
-        f"🇮🇩 *MESIN ENTRY MULTI-TF SCAN*\n"
+        f"{mcfg['flag']} *MESIN ENTRY MULTI-TF SCAN — {mcfg['name'].upper()}*\n"
         f"{sep}\n"
         f"📊 Engine: 1H + 15m + 5m confluence\n"
         f"⏰ `{now.strftime('%H:%M:%S')} ET` · `{now.strftime('%d %b %Y')}`\n"
@@ -1080,7 +1191,6 @@ def send_telegram_multi_tf_batch(top_results):
         stars = "★" * m["stars"] + "☆" * (4 - m["stars"])
         dir_emoji = "🟢" if m["direction"]=="LONG" else "🔴" if m["direction"]=="SHORT" else "⚪"
 
-        # Per-TF mini summary
         tf_summary = ""
         for tf_name in ["1h", "15m", "5m"]:
             tr = tfs.get(tf_name)
@@ -1092,17 +1202,17 @@ def send_telegram_multi_tf_batch(top_results):
         tf_summary = tf_summary.rstrip(" ·") + "\n"
 
         body += (
-            f"\n{i}. {stars} {dir_emoji} *{r['ticker']}* @ `Rp {r['price']:,.0f}` ({_pct(r['change_pct'])})\n"
+            f"\n{i}. {stars} {dir_emoji} *{r['ticker']}* @ `{cur_fn(r['price'])}` ({_pct(r['change_pct'])})\n"
             f"   *{m['label']}* · Score: `{m['score']:.0f}/100` · Conf `{m['avg_conf']*100:.0f}%`\n"
             f"{tf_summary}"
             f"   Regime: {r['trend']} · Vol: {r['vol']}\n"
         )
         if r["entry"]:
             e = r["entry"]
-            body += f"   💰 Entry `Rp {e['entry']:,.0f}` · TP `Rp {e['tp1']:,.0f}` · SL `Rp {e['sl']:,.0f}` · R:R `{e['rr1']:.1f}`\n"
+            body += f"   💰 Entry `{cur_fn(e['entry'])}` · TP `{cur_fn(e['tp1'])}` · SL `{cur_fn(e['sl'])}` · R:R `{e['rr1']:.1f}`\n"
     body += (
         f"\n{sep}\n"
-        f"⚡ _Mesin Entry Multi-TF v1.2_\n"
+        f"⚡ _Mesin Entry Multi-TF v1.3_\n"
         f"⚠️ _Probabilistik, BUKAN guarantee. Pakai R:R + position sizing!_"
     )
     try:
@@ -1116,15 +1226,17 @@ def send_telegram_multi_tf_batch(top_results):
     except Exception as e:
         return False, f"Error: {str(e)[:100]}"
 
-def send_telegram_idx_batch(top_results, timeframe):
-    """Send top N IDX results to Telegram as one batched message."""
+def send_telegram_idx_batch(top_results, timeframe, market_key="IDX"):
+    """Send top single-TF results to Telegram (market-aware)."""
     if not TOKEN or not CHAT_ID:
         return False, "Telegram tidak dikonfigurasi"
     if not top_results:
         return False, "Tidak ada signal untuk dikirim"
+    mcfg = MARKET_CONFIGS.get(market_key, MARKET_CONFIGS["IDX"])
+    cur_fn = mcfg["currency_fn"]
     now = datetime.now(et_tz); sep = "━" * 28
     body = (
-        f"🇮🇩 *MESIN ENTRY IDX SCAN*\n"
+        f"{mcfg['flag']} *MESIN ENTRY {mcfg['name'].upper()} SCAN*\n"
         f"{sep}\n"
         f"📊 Timeframe: *{timeframe}* · {TF_CONFIG[timeframe]['label']}\n"
         f"⏰ `{now.strftime('%H:%M:%S')} ET` · `{now.strftime('%d %b %Y')}`\n"
@@ -1134,16 +1246,16 @@ def send_telegram_idx_batch(top_results, timeframe):
     for i, r in enumerate(top_results, 1):
         dir_emoji = "🟢" if r["direction"]=="LONG" else "🔴" if r["direction"]=="SHORT" else "⚪"
         body += (
-            f"\n{i}. {dir_emoji} *{r['ticker']}* @ `Rp {r['price']:,.0f}` ({_pct(r['change_pct'])})\n"
+            f"\n{i}. {dir_emoji} *{r['ticker']}* @ `{cur_fn(r['price'])}` ({_pct(r['change_pct'])})\n"
             f"   P({r['label']}): `{r['prob']*100:.1f}%` · Conf `{r['conf']*100:.0f}%` · Win `{r['winrate']*100:.0f}%`\n"
             f"   Regime: {r['trend']} · Vol: {r['vol']}\n"
         )
         if r["entry"]:
             e = r["entry"]
-            body += f"   Entry `Rp {e['entry']:,.0f}` · TP `Rp {e['tp1']:,.0f}` · SL `Rp {e['sl']:,.0f}`\n"
+            body += f"   Entry `{cur_fn(e['entry'])}` · TP `{cur_fn(e['tp1'])}` · SL `{cur_fn(e['sl'])}`\n"
     body += (
         f"\n{sep}\n"
-        f"⚡ _Mesin Entry IDX Scan v1.1_\n"
+        f"⚡ _Mesin Entry {mcfg['name']} Scan v1.3_\n"
         f"⚠️ _Probabilistik, BUKAN guarantee!_"
     )
     try:
@@ -1268,8 +1380,381 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── TABS: SINGLE TICKER vs IDX MULTI-SCAN ───────────────────────
-tab_single, tab_idx = st.tabs(["🎯 Single Ticker Entry", "🇮🇩 IDX Multi-Scan (981 stocks)"])
+# ─── TABS: SINGLE TICKER vs IDX/US/CRYPTO MULTI-SCAN ─────────────
+def render_market_scan_tab(market_key):
+    """Render multi-scan UI for given market (IDX/US/Crypto). Uses MARKET_CONFIGS."""
+    mcfg = MARKET_CONFIGS[market_key]
+    n_total = len(mcfg["tickers"])
+    flag = mcfg["flag"]
+    market_name = mcfg["name"]
+    cur_fn = mcfg["currency_fn"]
+    unit = "saham" if market_key in ("IDX", "US") else "coins"
+    st.markdown("""
+    <div style="background: linear-gradient(135deg,#1a0d2e,#0d1421); border:1px solid #4a1c7a; border-radius:8px; padding:14px 18px; margin-bottom:14px;">
+        <div style="font-size:16px; font-weight:700; color:#bf5fff;">{flag} {market_name} Multi-Scan — {n_total} {unit}</div>
+        <div style="font-size:11px; color:#8b95a8; margin-top:4px;">
+            Apply Mesin Entry engine ke seluruh universe {market_name}. Pilih mode:<br>
+            <strong style="color:#00ff88;">⚡ Quick Scan</strong> — single TF (1-2 menit) ·
+            <strong style="color:#bf5fff;">★ Multi-TF Decision</strong> — 1H+15m+5m confluence (3-4 menit, lebih akurat)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Mode selector
+    mc1, mc2 = st.columns([2, 5])
+    with mc1:
+        sc_mode = st.radio(
+            "Scan Mode",
+            ["⚡ Quick (Single TF)", "★ Multi-TF Decision"],
+            index=1,  # default to Multi-TF
+            horizontal=False,
+            key=f"{market_key}_mode",
+            help="Multi-TF: 1H bias + 15m trigger + 5m execution → confluence score dengan stars rating"
+        )
+    is_multi_tf = sc_mode.startswith("★")
+
+    with mc2:
+        if is_multi_tf:
+            st.markdown("""
+            <div style="background:#0d1421; border:1px solid #4a1c7a; border-radius:6px; padding:10px 14px; margin-top:24px; font-size:11px;">
+                <strong style="color:#bf5fff;">★★★★ Multi-TF Decision logic:</strong><br>
+                • 1H weight 45% (BIAS) · 15m weight 35% (TRIGGER) · 5m weight 20% (EXECUTION)<br>
+                • ★★★★ STRONG: all 3 TFs aligned + score ≥65 · ★★★ VALID: ≥2 aligned + score ≥50<br>
+                • ★★ MONITOR: partial · ★ WEAK: marginal · ✗ WAIT: skip
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background:#0d1421; border:1px solid #1c4a2d; border-radius:6px; padding:10px 14px; margin-top:24px; font-size:11px;">
+                <strong style="color:#00ff88;">⚡ Quick Single-TF Mode:</strong><br>
+                Analisa cuma 1 timeframe (cepat ~1-2 menit). Pakai mode ini buat pre-screen.
+                Setelah dapat kandidat, switch ke Multi-TF buat konfirmasi.
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Multi-TF Coverage selector (only relevant in multi-TF mode)
+    if is_multi_tf:
+        cov_label = st.radio(
+            "Stage 2 Coverage — berapa kandidat dari Stage 1 yang di-deep-dive multi-TF",
+            ["⚡ Top 100 (~2 menit)", "📊 Top 300 (~5 menit)", "🔥 Top 500 (~8 menit)", "💎 ALL {n_total} {unit} (~15 menit)"],
+            index=0, horizontal=True, key=f"{market_key}_coverage",
+            help="Stage 1 selalu scan semua 981. Stage 2 (multi-TF) cuma deep-dive top N kandidat dari Stage 1. Lebih banyak = lebih komprehensif tapi lebih lama."
+        )
+        coverage_map = {
+            "⚡ Top 100 (~2 menit)": 100,
+            "📊 Top 300 (~5 menit)": 300,
+            "🔥 Top 500 (~8 menit)": 500,
+            "💎 ALL {n_total} {unit} (~15 menit)": 981,
+        }
+        sc_coverage_n = coverage_map[cov_label]
+    else:
+        sc_coverage_n = 100  # not used in quick mode
+
+    # Settings row
+    ic1, ic2, ic3, ic4, ic5 = st.columns([2, 2, 2, 1, 1.5])
+    with ic1:
+        if is_multi_tf:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.caption("**TFs analyzed:** 1H · 15m · 5m (fixed)")
+            sc_tf = "15m"  # used for stage 1 pre-screen
+        else:
+            sc_tf = st.selectbox("Timeframe", list(TF_CONFIG.keys()), index=1, key=f"{market_key}_tf",
+                help="Entry timeframe. 15m=intraday, 1h=swing, 1d=position, 1wk=bagger")
+    with ic2:
+        if is_multi_tf:
+            sc_min_stars = st.slider("Min Stars", 1, 4, 2, key=f"{market_key}_min_stars",
+                help="Filter: hanya tampilkan signal dengan ≥N stars")
+            sc_min_prob = 0.55  # stage 1 threshold (semi-permissive)
+        else:
+            sc_min_prob = st.slider("Min Probability", 0.55, 0.85, 0.60, 0.05, key=f"{market_key}_mp",
+                help="Filter: tampilkan signal dengan P(direction) >= ini")
+            sc_min_stars = 0
+    with ic3:
+        sc_dir = st.selectbox("Direction", ["ALL", "LONG", "SHORT"], index=0, key=f"{market_key}_dir")
+    with ic4:
+        sc_k = st.slider("KNN k", 5, 30, 20, key=f"{market_key}_k")
+    with ic5:
+        st.markdown("<br>", unsafe_allow_html=True)
+        scan_btn_label = "★ MULTI-TF SCAN" if is_multi_tf else f"🔥 SCAN ALL {market_name.upper()}"
+        sc_scan_btn = st.button(scan_btn_label, type="primary", use_container_width=True, key=f"{market_key}_scan_btn")
+
+    # Telegram button
+    icb1, icb2, _ = st.columns([1.5, 1.5, 5])
+    with icb1:
+        sc_tg_btn = st.button("📡 Top 10 → Telegram", use_container_width=True, key=f"{market_key}_tg_btn")
+    with icb2:
+        if st.button("🗑️ Clear results", use_container_width=True, key=f"{market_key}_clear_btn"):
+            for k_ in ["{0}_scan_results".format(market_key),"{0}_skip_reasons".format(market_key),"{0}_multi_tf_results".format(market_key),"{0}_multi_tf_stats".format(market_key)]:
+                st.session_state.pop(k_, None)
+
+    # Execute scan
+    if sc_scan_btn:
+        prog = st.progress(0, text="Initializing scan...")
+        def _pcb(done, total, phase):
+            # Map phase to display text + bar percentage
+            if phase.startswith("stage1_"):
+                # Stage 1: 0-50% of overall bar
+                pct = min((done/total)*0.5, 0.5) if total > 0 else 0
+                action = "fetching" if "fetch" in phase else "analyzing"
+                text = f"📥 STAGE 1 ({action} all {total} {market_name}): {done}/{total} ({int(done/total*100) if total else 0}%)"
+            elif phase == "stage2_multi_tf":
+                # Stage 2: 50-100% of overall bar
+                pct = 0.5 + min((done/total)*0.5, 0.5) if total > 0 else 0.5
+                text = f"★ STAGE 2 multi-TF: {done}/{total} candidates ({int(done/total*100) if total else 0}%)"
+            elif phase in ("fullscan_multi_tf", "fullscan_init"):
+                # Full universe mode: single 0-100% bar
+                pct = done/total if total > 0 else 0
+                text = f"💎 FULL UNIVERSE multi-TF: {done}/{total} ({int(done/total*100) if total else 0}%)"
+            elif phase in ("fetching", "analyzing"):
+                # Quick (single-TF) mode
+                pct = done/total if total > 0 else 0
+                action = "FETCH" if phase == "fetching" else "ANALYZE"
+                text = f"📥 {action}: {done}/{total} ({int(done/total*100) if total else 0}%)"
+            else:
+                pct = done/total if total else 0
+                text = f"{phase}: {done}/{total}"
+            prog.progress(pct, text=text)
+
+        if is_multi_tf:
+            with st.spinner("Multi-TF Scan: 2-stage analysis (1H + 15m + 5m)..."):
+                res, stats = scan_market_multi_tf(market_key=market_key, 
+                    stage1_min_prob=0.52, top_n_stage2=sc_coverage_n, k=sc_k,
+                    min_stars=sc_min_stars, direction_filter=sc_dir,
+                    workers=6, progress_cb=_pcb
+                )
+                st.session_state["{0}_multi_tf_results".format(market_key)] = res
+                st.session_state["{0}_multi_tf_stats".format(market_key)] = stats
+                st.session_state["{0}_scan_time".format(market_key)] = time.time()
+                st.session_state.pop("{0}_scan_results".format(market_key), None)  # clear single-TF results
+        else:
+            with st.spinner(f"Scanning {n_total} {market_name} on {sc_tf}..."):
+                res, skip = scan_market_universe(market_key=market_key, 
+                    timeframe=sc_tf, k=sc_k, min_prob=sc_min_prob,
+                    direction_filter=sc_dir, workers=6, progress_cb=_pcb
+                )
+                st.session_state["{0}_scan_results".format(market_key)] = res
+            st.session_state["{0}_skip_reasons".format(market_key)] = skip
+            st.session_state["{0}_scan_tf".format(market_key)] = sc_tf
+            st.session_state["{0}_scan_time".format(market_key)] = time.time()
+        prog.empty()
+
+    # Display results — branch based on mode
+    sc_results = st.session_state.get("{0}_scan_results".format(market_key), [])
+    sc_skip = st.session_state.get("{0}_skip_reasons".format(market_key), {})
+    sc_tf_used = st.session_state.get("{0}_scan_tf".format(market_key), sc_tf)
+    mtf_results = st.session_state.get("{0}_multi_tf_results".format(market_key), [])
+    mtf_stats = st.session_state.get("{0}_multi_tf_stats".format(market_key), {})
+
+    # Telegram dispatch
+    if sc_tg_btn:
+        if mtf_results:
+            ok, msg = send_telegram_multi_tf_batch(mtf_results[:10], market_key=market_key)
+            if ok: st.success(f"Telegram: {msg}")
+            else:  st.error(f"Telegram: {msg}")
+        elif sc_results:
+            ok, msg = send_telegram_idx_batch(sc_results[:10], sc_tf_used, market_key=market_key)
+            if ok: st.success(f"Telegram: {msg}")
+            else:  st.error(f"Telegram: {msg}")
+        else:
+            st.warning("Scan dulu sebelum kirim Telegram bro")
+
+    # ═══ MULTI-TF RESULTS DISPLAY ═══
+    if mtf_results:
+        n_long = sum(1 for r in mtf_results if r["multi_tf"]["direction"]=="LONG")
+        n_short = sum(1 for r in mtf_results if r["multi_tf"]["direction"]=="SHORT")
+        n_4star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==4)
+        n_3star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==3)
+        n_2star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==2)
+
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#1a0d2e,#0d1421); border:1px solid #4a1c7a; border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:12px;">
+            <strong style="color:#bf5fff;">★ Multi-TF Decision Results</strong> · {len(mtf_results)} signals ·
+            <span style="color:#00ff88;">🟢 {n_long} LONG</span> ·
+            <span style="color:#ff3d5a;">🔴 {n_short} SHORT</span> ·
+            <span style="color:#ffb700;">★★★★ {n_4star}</span> ·
+            <span style="color:#4da6ff;">★★★ {n_3star}</span> ·
+            <span style="color:#8b95a8;">★★ {n_2star}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Multi-TF result table
+        table_rows = ""
+        for i, r in enumerate(mtf_results[:50]):
+            m = r["multi_tf"]
+            tfs = r["tf_results"]
+            stars_disp = "★" * m["stars"] + "<span style='color:#1c2533;'>" + "★" * (4-m["stars"]) + "</span>"
+            dir_col = "#00ff88" if m["direction"]=="LONG" else "#ff3d5a" if m["direction"]=="SHORT" else "#ffb700"
+            dir_emoji = "🟢" if m["direction"]=="LONG" else "🔴" if m["direction"]=="SHORT" else "⚪"
+            chg_col = "#00ff88" if r["change_pct"]>=0 else "#ff3d5a"
+            chg_sym = "▲" if r["change_pct"]>=0 else "▼"
+
+            # Per-TF direction badges
+            def _tf_badge(tf_key):
+                tr = tfs.get(tf_key)
+                if tr is None: return '<span style="color:#4a5568;">✗</span>'
+                if tr["direction"] == "LONG":  return f'<span style="color:#00ff88; font-weight:700;">🟢 {tr["prob"]*100:.0f}</span>'
+                if tr["direction"] == "SHORT": return f'<span style="color:#ff3d5a; font-weight:700;">🔴 {(100-tr["prob"]*100):.0f}</span>'
+                return f'<span style="color:#ffb700;">⚪ {tr["prob"]*100:.0f}</span>'
+
+            e = r.get("entry")
+            entry_str = f"{cur_fn(e["entry"])}" if e else "—"
+            tp_str = f"{cur_fn(e["tp1"])}" if e else "—"
+            sl_str = f"{cur_fn(e["sl"])}" if e else "—"
+            rr_str = f"{e['rr1']:.2f}" if e else "—"
+
+            table_rows += (
+                f'<tr>'
+                f'<td style="color:#4a5568; text-align:center;">{i+1}</td>'
+                f'<td style="color:#ffb700; font-size:13px;">{stars_disp}</td>'
+                f'<td style="color:#e2e8f0; font-weight:700;">{r["ticker"]}</td>'
+                f'<td style="text-align:right; color:#e2e8f0;">{cur_fn(r["price"])}</td>'
+                f'<td style="text-align:right; color:{chg_col};">{chg_sym} {abs(r["change_pct"]):.2f}%</td>'
+                f'<td style="text-align:center; color:{dir_col}; font-weight:700;">{dir_emoji} {m["label"]}</td>'
+                f'<td style="text-align:right; color:{dir_col}; font-weight:700;">{m["score"]:.0f}</td>'
+                f'<td style="text-align:center;">{_tf_badge("1h")}</td>'
+                f'<td style="text-align:center;">{_tf_badge("15m")}</td>'
+                f'<td style="text-align:center;">{_tf_badge("5m")}</td>'
+                f'<td style="text-align:right; color:#e2e8f0;">{entry_str}</td>'
+                f'<td style="text-align:right; color:#00ff88;">{tp_str}</td>'
+                f'<td style="text-align:right; color:#ff3d5a;">{sl_str}</td>'
+                f'<td style="text-align:center; color:#8b95a8;">{rr_str}</td>'
+                f'<td style="text-align:center; color:#4a5568; font-size:10px;">{r["trend"]}</td>'
+                f'</tr>'
+            )
+        st.markdown(
+            '<table class="knn-table" style="margin-top:8px;">'
+            '<tr>'
+            '<th style="width:30px;">#</th>'
+            '<th style="width:70px;">Stars</th>'
+            '<th>Ticker</th>'
+            '<th style="text-align:right;">Price</th>'
+            '<th style="text-align:right;">Chg%</th>'
+            '<th style="text-align:center;">Decision</th>'
+            '<th style="text-align:right;">Score</th>'
+            '<th style="text-align:center;">1H</th>'
+            '<th style="text-align:center;">15m</th>'
+            '<th style="text-align:center;">5m</th>'
+            '<th style="text-align:right;">Entry</th>'
+            '<th style="text-align:right;">TP1</th>'
+            '<th style="text-align:right;">SL</th>'
+            '<th style="text-align:center;">R:R</th>'
+            '<th style="text-align:center;">Trend</th>'
+            '</tr>' + table_rows + '</table>',
+            unsafe_allow_html=True
+        )
+        if len(mtf_results) > 50:
+            st.caption(f"Showing top 50 of {len(mtf_results)} signals (sorted by multi-TF score)")
+
+        # Stats
+        with st.expander("📊 Multi-TF scan breakdown"):
+            mode_label = "💎 FULL UNIVERSE (bypassed Stage 1 filter)" if mtf_stats.get("mode")=="full_universe" else "📊 2-STAGE (Quick pre-screen → Multi-TF confirm)"
+            st.markdown(f"""
+            **Scan mode:** {mode_label}
+
+            **Stage 1 (15m pre-screen):**
+            - Total {market_name} stocks scanned: {mtf_stats.get('stage1_total', 0)}
+            - Passed initial threshold: {mtf_stats.get('stage1_passed', 0)}
+            - Skip reasons: {mtf_stats.get('stage1_skip', {})}
+
+            **Stage 2 (Multi-TF confirmation):**
+            - Candidates analyzed multi-TF: {mtf_stats.get('stage2_candidates', 0)}
+            - Passed multi-TF filter (≥ Min Stars): {mtf_stats.get('stage2_passed', 0)}
+            - Skip reasons: {mtf_stats.get('stage2_skip', {})}
+            """)
+
+    # ═══ SINGLE-TF RESULTS DISPLAY ═══
+    elif sc_results:
+        # Summary stats
+        n_long = sum(1 for r in sc_results if r["direction"] == "LONG")
+        n_short = sum(1 for r in sc_results if r["direction"] == "SHORT")
+        n_wait = sum(1 for r in sc_results if r["direction"] == "WAIT")
+        st.markdown(f"""
+        <div style="background:#0d1421; border:1px solid #1c2533; border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:12px;">
+            <strong>{len(sc_results)} signals</strong> lolos filter ·
+            <span style="color:#00ff88;">🟢 {n_long} LONG</span> ·
+            <span style="color:#ff3d5a;">🔴 {n_short} SHORT</span> ·
+            <span style="color:#ffb700;">⚪ {n_wait} WAIT</span>
+            · TF: <strong>{sc_tf_used}</strong>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Results table
+        table_rows = ""
+        for i, r in enumerate(sc_results[:50]):  # show top 50
+            prob = r["prob"]; conf = r["conf"]
+            dir_col = "#00ff88" if r["direction"]=="LONG" else "#ff3d5a" if r["direction"]=="SHORT" else "#ffb700"
+            dir_emoji = "🟢" if r["direction"]=="LONG" else "🔴" if r["direction"]=="SHORT" else "⚪"
+            chg_col = "#00ff88" if r["change_pct"]>=0 else "#ff3d5a"
+            chg_sym = "▲" if r["change_pct"]>=0 else "▼"
+            prob_disp = prob*100 if r["direction"]=="LONG" else (100-prob*100) if r["direction"]=="SHORT" else prob*100
+            wr_col = "#00ff88" if r["winrate"]>=0.55 else "#ff3d5a" if r["winrate"]<=0.45 else "#ffb700"
+            e = r.get("entry")
+            entry_str = f"{cur_fn(e["entry"])}" if e else "—"
+            tp_str    = f"{cur_fn(e["tp1"])}"   if e else "—"
+            sl_str    = f"{cur_fn(e["sl"])}"    if e else "—"
+            rr_str    = f"{e['rr1']:.2f}"        if e else "—"
+            table_rows += (
+                f'<tr>'
+                f'<td style="color:#4a5568; text-align:center;">{i+1}</td>'
+                f'<td style="color:#e2e8f0; font-weight:700;">{r["ticker"]}</td>'
+                f'<td style="text-align:right; color:#e2e8f0;">{cur_fn(r["price"])}</td>'
+                f'<td style="text-align:right; color:{chg_col};">{chg_sym} {abs(r["change_pct"]):.2f}%</td>'
+                f'<td style="text-align:center; color:{dir_col}; font-weight:700;">{dir_emoji} {r["direction"]}</td>'
+                f'<td style="text-align:right; color:{dir_col}; font-weight:700;">{prob_disp:.1f}%</td>'
+                f'<td style="text-align:right; color:#8b95a8;">{conf*100:.0f}%</td>'
+                f'<td style="text-align:right; color:{wr_col};">{r["winrate"]*100:.0f}%</td>'
+                f'<td style="text-align:right; color:#e2e8f0;">{entry_str}</td>'
+                f'<td style="text-align:right; color:#00ff88;">{tp_str}</td>'
+                f'<td style="text-align:right; color:#ff3d5a;">{sl_str}</td>'
+                f'<td style="text-align:center; color:#8b95a8;">{rr_str}</td>'
+                f'<td style="text-align:center; color:#4a5568; font-size:10px;">{r["trend"]}</td>'
+                f'</tr>'
+            )
+        st.markdown(
+            '<table class="knn-table" style="margin-top:8px;">'
+            '<tr>'
+            '<th style="width:30px;">#</th>'
+            '<th>Ticker</th>'
+            '<th style="text-align:right;">Price</th>'
+            '<th style="text-align:right;">Chg%</th>'
+            '<th style="text-align:center;">Direction</th>'
+            f'<th style="text-align:right;">P({sc_tf_used})</th>'
+            '<th style="text-align:right;">Conf</th>'
+            '<th style="text-align:right;">Win</th>'
+            '<th style="text-align:right;">Entry</th>'
+            '<th style="text-align:right;">TP1</th>'
+            '<th style="text-align:right;">SL</th>'
+            '<th style="text-align:center;">R:R</th>'
+            '<th style="text-align:center;">Trend</th>'
+            '</tr>' + table_rows + '</table>',
+            unsafe_allow_html=True
+        )
+        if len(sc_results) > 50:
+            st.caption(f"Showing top 50 of {len(sc_results)} signals (sorted by directional strength)")
+
+        # Skip breakdown
+        with st.expander("📊 Skip breakdown (debugging)"):
+            st.markdown(f"""
+            - **No data / insufficient bars:** {sc_skip.get('no_data',0)}
+            - **Feature matrix gagal:** {sc_skip.get('features_fail',0)}
+            - **Below min probability:** {sc_skip.get('low_prob',0)}
+            - **Wrong direction (filter):** {sc_skip.get('wrong_dir',0)}
+            - **Total scanned:** {n_total}
+            - **Total signals returned:** {len(sc_results)}
+            """)
+    else:
+        if "{0}_scan_results".format(market_key) in st.session_state or "{0}_multi_tf_results".format(market_key) in st.session_state:
+            st.warning("Scan selesai tapi tidak ada signal yang lolos filter. Coba turunkan Min Stars/Probability atau ganti Direction filter.")
+        else:
+            st.info("👆 Pilih mode (Quick / Multi-TF) lalu klik tombol scan. Multi-TF butuh ~3-4 menit untuk full 981 saham (2-stage analysis).")
+
+
+tab_single, tab_idx, tab_us, tab_crypto = st.tabs([
+    "🎯 Single Ticker Entry",
+    "🇮🇩 IDX Multi-Scan (981)",
+    "🇺🇸 US Multi-Scan (583)",
+    "₿ Crypto Multi-Scan (208)",
+])
 
 with tab_single:
     # ─── INPUT ROW ────────────────────────────────────────────────────
@@ -1711,364 +2196,13 @@ with tab_single:
 
 
 with tab_idx:
-    st.markdown("""
-    <div style="background: linear-gradient(135deg,#1a0d2e,#0d1421); border:1px solid #4a1c7a; border-radius:8px; padding:14px 18px; margin-bottom:14px;">
-        <div style="font-size:16px; font-weight:700; color:#bf5fff;">🇮🇩 IDX Multi-Scan — 981 saham</div>
-        <div style="font-size:11px; color:#8b95a8; margin-top:4px;">
-            Apply Mesin Entry engine ke seluruh universe IDX. Pilih mode:<br>
-            <strong style="color:#00ff88;">⚡ Quick Scan</strong> — single TF (1-2 menit) ·
-            <strong style="color:#bf5fff;">★ Multi-TF Decision</strong> — 1H+15m+5m confluence (3-4 menit, lebih akurat)
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    render_market_scan_tab("IDX")
 
-    # Mode selector
-    mc1, mc2 = st.columns([2, 5])
-    with mc1:
-        idx_mode = st.radio(
-            "Scan Mode",
-            ["⚡ Quick (Single TF)", "★ Multi-TF Decision"],
-            index=1,  # default to Multi-TF
-            horizontal=False,
-            key="idx_mode",
-            help="Multi-TF: 1H bias + 15m trigger + 5m execution → confluence score dengan stars rating"
-        )
-    is_multi_tf = idx_mode.startswith("★")
+with tab_us:
+    render_market_scan_tab("US")
 
-    with mc2:
-        if is_multi_tf:
-            st.markdown("""
-            <div style="background:#0d1421; border:1px solid #4a1c7a; border-radius:6px; padding:10px 14px; margin-top:24px; font-size:11px;">
-                <strong style="color:#bf5fff;">★★★★ Multi-TF Decision logic:</strong><br>
-                • 1H weight 45% (BIAS) · 15m weight 35% (TRIGGER) · 5m weight 20% (EXECUTION)<br>
-                • ★★★★ STRONG: all 3 TFs aligned + score ≥65 · ★★★ VALID: ≥2 aligned + score ≥50<br>
-                • ★★ MONITOR: partial · ★ WEAK: marginal · ✗ WAIT: skip
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div style="background:#0d1421; border:1px solid #1c4a2d; border-radius:6px; padding:10px 14px; margin-top:24px; font-size:11px;">
-                <strong style="color:#00ff88;">⚡ Quick Single-TF Mode:</strong><br>
-                Analisa cuma 1 timeframe (cepat ~1-2 menit). Pakai mode ini buat pre-screen.
-                Setelah dapat kandidat, switch ke Multi-TF buat konfirmasi.
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Multi-TF Coverage selector (only relevant in multi-TF mode)
-    if is_multi_tf:
-        cov_label = st.radio(
-            "Stage 2 Coverage — berapa kandidat dari Stage 1 yang di-deep-dive multi-TF",
-            ["⚡ Top 100 (~2 menit)", "📊 Top 300 (~5 menit)", "🔥 Top 500 (~8 menit)", "💎 ALL 981 saham (~15 menit)"],
-            index=0, horizontal=True, key="idx_coverage",
-            help="Stage 1 selalu scan semua 981. Stage 2 (multi-TF) cuma deep-dive top N kandidat dari Stage 1. Lebih banyak = lebih komprehensif tapi lebih lama."
-        )
-        coverage_map = {
-            "⚡ Top 100 (~2 menit)": 100,
-            "📊 Top 300 (~5 menit)": 300,
-            "🔥 Top 500 (~8 menit)": 500,
-            "💎 ALL 981 saham (~15 menit)": 981,
-        }
-        idx_coverage_n = coverage_map[cov_label]
-    else:
-        idx_coverage_n = 100  # not used in quick mode
-
-    # Settings row
-    ic1, ic2, ic3, ic4, ic5 = st.columns([2, 2, 2, 1, 1.5])
-    with ic1:
-        if is_multi_tf:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.caption("**TFs analyzed:** 1H · 15m · 5m (fixed)")
-            idx_tf = "15m"  # used for stage 1 pre-screen
-        else:
-            idx_tf = st.selectbox("Timeframe", list(TF_CONFIG.keys()), index=1, key="idx_tf",
-                help="Entry timeframe. 15m=intraday, 1h=swing, 1d=position, 1wk=bagger")
-    with ic2:
-        if is_multi_tf:
-            idx_min_stars = st.slider("Min Stars", 1, 4, 2, key="idx_min_stars",
-                help="Filter: hanya tampilkan signal dengan ≥N stars")
-            idx_min_prob = 0.55  # stage 1 threshold (semi-permissive)
-        else:
-            idx_min_prob = st.slider("Min Probability", 0.55, 0.85, 0.60, 0.05, key="idx_mp",
-                help="Filter: tampilkan signal dengan P(direction) >= ini")
-            idx_min_stars = 0
-    with ic3:
-        idx_dir = st.selectbox("Direction", ["ALL", "LONG", "SHORT"], index=0, key="idx_dir")
-    with ic4:
-        idx_k = st.slider("KNN k", 5, 30, 20, key="idx_k")
-    with ic5:
-        st.markdown("<br>", unsafe_allow_html=True)
-        scan_btn_label = "★ MULTI-TF SCAN" if is_multi_tf else "🔥 SCAN ALL IDX"
-        idx_scan_btn = st.button(scan_btn_label, type="primary", use_container_width=True, key="idx_scan_btn")
-
-    # Telegram button
-    icb1, icb2, _ = st.columns([1.5, 1.5, 5])
-    with icb1:
-        idx_tg_btn = st.button("📡 Top 10 → Telegram", use_container_width=True, key="idx_tg_btn")
-    with icb2:
-        if st.button("🗑️ Clear results", use_container_width=True, key="idx_clear_btn"):
-            for k_ in ["idx_scan_results","idx_skip_reasons","idx_multi_tf_results","idx_multi_tf_stats"]:
-                st.session_state.pop(k_, None)
-
-    # Execute scan
-    if idx_scan_btn:
-        prog = st.progress(0, text="Initializing scan...")
-        def _pcb(done, total, phase):
-            # Map phase to display text + bar percentage
-            if phase.startswith("stage1_"):
-                # Stage 1: 0-50% of overall bar
-                pct = min((done/total)*0.5, 0.5) if total > 0 else 0
-                action = "fetching" if "fetch" in phase else "analyzing"
-                text = f"📥 STAGE 1 ({action} all {total} IDX): {done}/{total} ({int(done/total*100) if total else 0}%)"
-            elif phase == "stage2_multi_tf":
-                # Stage 2: 50-100% of overall bar
-                pct = 0.5 + min((done/total)*0.5, 0.5) if total > 0 else 0.5
-                text = f"★ STAGE 2 multi-TF: {done}/{total} candidates ({int(done/total*100) if total else 0}%)"
-            elif phase in ("fullscan_multi_tf", "fullscan_init"):
-                # Full universe mode: single 0-100% bar
-                pct = done/total if total > 0 else 0
-                text = f"💎 FULL UNIVERSE multi-TF: {done}/{total} ({int(done/total*100) if total else 0}%)"
-            elif phase in ("fetching", "analyzing"):
-                # Quick (single-TF) mode
-                pct = done/total if total > 0 else 0
-                action = "FETCH" if phase == "fetching" else "ANALYZE"
-                text = f"📥 {action}: {done}/{total} ({int(done/total*100) if total else 0}%)"
-            else:
-                pct = done/total if total else 0
-                text = f"{phase}: {done}/{total}"
-            prog.progress(pct, text=text)
-
-        if is_multi_tf:
-            with st.spinner("Multi-TF Scan: 2-stage analysis (1H + 15m + 5m)..."):
-                res, stats = scan_idx_multi_tf(
-                    stage1_min_prob=0.52, top_n_stage2=idx_coverage_n, k=idx_k,
-                    min_stars=idx_min_stars, direction_filter=idx_dir,
-                    workers=6, progress_cb=_pcb
-                )
-                st.session_state["idx_multi_tf_results"] = res
-                st.session_state["idx_multi_tf_stats"] = stats
-                st.session_state["idx_scan_time"] = time.time()
-                st.session_state.pop("idx_scan_results", None)  # clear single-TF results
-        else:
-            with st.spinner(f"Scanning {len(IDX_TICKERS)} IDX stocks on {idx_tf}..."):
-                res, skip = scan_idx_universe(
-                    timeframe=idx_tf, k=idx_k, min_prob=idx_min_prob,
-                    direction_filter=idx_dir, workers=6, progress_cb=_pcb
-                )
-                st.session_state["idx_scan_results"] = res
-            st.session_state["idx_skip_reasons"] = skip
-            st.session_state["idx_scan_tf"] = idx_tf
-            st.session_state["idx_scan_time"] = time.time()
-        prog.empty()
-
-    # Display results — branch based on mode
-    idx_results = st.session_state.get("idx_scan_results", [])
-    idx_skip = st.session_state.get("idx_skip_reasons", {})
-    idx_tf_used = st.session_state.get("idx_scan_tf", idx_tf)
-    mtf_results = st.session_state.get("idx_multi_tf_results", [])
-    mtf_stats = st.session_state.get("idx_multi_tf_stats", {})
-
-    # Telegram dispatch
-    if idx_tg_btn:
-        if mtf_results:
-            ok, msg = send_telegram_multi_tf_batch(mtf_results[:10])
-            if ok: st.success(f"Telegram: {msg}")
-            else:  st.error(f"Telegram: {msg}")
-        elif idx_results:
-            ok, msg = send_telegram_idx_batch(idx_results[:10], idx_tf_used)
-            if ok: st.success(f"Telegram: {msg}")
-            else:  st.error(f"Telegram: {msg}")
-        else:
-            st.warning("Scan dulu sebelum kirim Telegram bro")
-
-    # ═══ MULTI-TF RESULTS DISPLAY ═══
-    if mtf_results:
-        n_long = sum(1 for r in mtf_results if r["multi_tf"]["direction"]=="LONG")
-        n_short = sum(1 for r in mtf_results if r["multi_tf"]["direction"]=="SHORT")
-        n_4star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==4)
-        n_3star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==3)
-        n_2star = sum(1 for r in mtf_results if r["multi_tf"]["stars"]==2)
-
-        st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#1a0d2e,#0d1421); border:1px solid #4a1c7a; border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:12px;">
-            <strong style="color:#bf5fff;">★ Multi-TF Decision Results</strong> · {len(mtf_results)} signals ·
-            <span style="color:#00ff88;">🟢 {n_long} LONG</span> ·
-            <span style="color:#ff3d5a;">🔴 {n_short} SHORT</span> ·
-            <span style="color:#ffb700;">★★★★ {n_4star}</span> ·
-            <span style="color:#4da6ff;">★★★ {n_3star}</span> ·
-            <span style="color:#8b95a8;">★★ {n_2star}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Multi-TF result table
-        table_rows = ""
-        for i, r in enumerate(mtf_results[:50]):
-            m = r["multi_tf"]
-            tfs = r["tf_results"]
-            stars_disp = "★" * m["stars"] + "<span style='color:#1c2533;'>" + "★" * (4-m["stars"]) + "</span>"
-            dir_col = "#00ff88" if m["direction"]=="LONG" else "#ff3d5a" if m["direction"]=="SHORT" else "#ffb700"
-            dir_emoji = "🟢" if m["direction"]=="LONG" else "🔴" if m["direction"]=="SHORT" else "⚪"
-            chg_col = "#00ff88" if r["change_pct"]>=0 else "#ff3d5a"
-            chg_sym = "▲" if r["change_pct"]>=0 else "▼"
-
-            # Per-TF direction badges
-            def _tf_badge(tf_key):
-                tr = tfs.get(tf_key)
-                if tr is None: return '<span style="color:#4a5568;">✗</span>'
-                if tr["direction"] == "LONG":  return f'<span style="color:#00ff88; font-weight:700;">🟢 {tr["prob"]*100:.0f}</span>'
-                if tr["direction"] == "SHORT": return f'<span style="color:#ff3d5a; font-weight:700;">🔴 {(100-tr["prob"]*100):.0f}</span>'
-                return f'<span style="color:#ffb700;">⚪ {tr["prob"]*100:.0f}</span>'
-
-            e = r.get("entry")
-            entry_str = f"Rp {e['entry']:,.0f}" if e else "—"
-            tp_str = f"Rp {e['tp1']:,.0f}" if e else "—"
-            sl_str = f"Rp {e['sl']:,.0f}" if e else "—"
-            rr_str = f"{e['rr1']:.2f}" if e else "—"
-
-            table_rows += (
-                f'<tr>'
-                f'<td style="color:#4a5568; text-align:center;">{i+1}</td>'
-                f'<td style="color:#ffb700; font-size:13px;">{stars_disp}</td>'
-                f'<td style="color:#e2e8f0; font-weight:700;">{r["ticker"]}</td>'
-                f'<td style="text-align:right; color:#e2e8f0;">Rp {r["price"]:,.0f}</td>'
-                f'<td style="text-align:right; color:{chg_col};">{chg_sym} {abs(r["change_pct"]):.2f}%</td>'
-                f'<td style="text-align:center; color:{dir_col}; font-weight:700;">{dir_emoji} {m["label"]}</td>'
-                f'<td style="text-align:right; color:{dir_col}; font-weight:700;">{m["score"]:.0f}</td>'
-                f'<td style="text-align:center;">{_tf_badge("1h")}</td>'
-                f'<td style="text-align:center;">{_tf_badge("15m")}</td>'
-                f'<td style="text-align:center;">{_tf_badge("5m")}</td>'
-                f'<td style="text-align:right; color:#e2e8f0;">{entry_str}</td>'
-                f'<td style="text-align:right; color:#00ff88;">{tp_str}</td>'
-                f'<td style="text-align:right; color:#ff3d5a;">{sl_str}</td>'
-                f'<td style="text-align:center; color:#8b95a8;">{rr_str}</td>'
-                f'<td style="text-align:center; color:#4a5568; font-size:10px;">{r["trend"]}</td>'
-                f'</tr>'
-            )
-        st.markdown(
-            '<table class="knn-table" style="margin-top:8px;">'
-            '<tr>'
-            '<th style="width:30px;">#</th>'
-            '<th style="width:70px;">Stars</th>'
-            '<th>Ticker</th>'
-            '<th style="text-align:right;">Price</th>'
-            '<th style="text-align:right;">Chg%</th>'
-            '<th style="text-align:center;">Decision</th>'
-            '<th style="text-align:right;">Score</th>'
-            '<th style="text-align:center;">1H</th>'
-            '<th style="text-align:center;">15m</th>'
-            '<th style="text-align:center;">5m</th>'
-            '<th style="text-align:right;">Entry</th>'
-            '<th style="text-align:right;">TP1</th>'
-            '<th style="text-align:right;">SL</th>'
-            '<th style="text-align:center;">R:R</th>'
-            '<th style="text-align:center;">Trend</th>'
-            '</tr>' + table_rows + '</table>',
-            unsafe_allow_html=True
-        )
-        if len(mtf_results) > 50:
-            st.caption(f"Showing top 50 of {len(mtf_results)} signals (sorted by multi-TF score)")
-
-        # Stats
-        with st.expander("📊 Multi-TF scan breakdown"):
-            mode_label = "💎 FULL UNIVERSE (bypassed Stage 1 filter)" if mtf_stats.get("mode")=="full_universe" else "📊 2-STAGE (Quick pre-screen → Multi-TF confirm)"
-            st.markdown(f"""
-            **Scan mode:** {mode_label}
-
-            **Stage 1 (15m pre-screen):**
-            - Total IDX stocks scanned: {mtf_stats.get('stage1_total', 0)}
-            - Passed initial threshold: {mtf_stats.get('stage1_passed', 0)}
-            - Skip reasons: {mtf_stats.get('stage1_skip', {})}
-
-            **Stage 2 (Multi-TF confirmation):**
-            - Candidates analyzed multi-TF: {mtf_stats.get('stage2_candidates', 0)}
-            - Passed multi-TF filter (≥ Min Stars): {mtf_stats.get('stage2_passed', 0)}
-            - Skip reasons: {mtf_stats.get('stage2_skip', {})}
-            """)
-
-    # ═══ SINGLE-TF RESULTS DISPLAY ═══
-    elif idx_results:
-        # Summary stats
-        n_long = sum(1 for r in idx_results if r["direction"] == "LONG")
-        n_short = sum(1 for r in idx_results if r["direction"] == "SHORT")
-        n_wait = sum(1 for r in idx_results if r["direction"] == "WAIT")
-        st.markdown(f"""
-        <div style="background:#0d1421; border:1px solid #1c2533; border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:12px;">
-            <strong>{len(idx_results)} signals</strong> lolos filter ·
-            <span style="color:#00ff88;">🟢 {n_long} LONG</span> ·
-            <span style="color:#ff3d5a;">🔴 {n_short} SHORT</span> ·
-            <span style="color:#ffb700;">⚪ {n_wait} WAIT</span>
-            · TF: <strong>{idx_tf_used}</strong>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Results table
-        table_rows = ""
-        for i, r in enumerate(idx_results[:50]):  # show top 50
-            prob = r["prob"]; conf = r["conf"]
-            dir_col = "#00ff88" if r["direction"]=="LONG" else "#ff3d5a" if r["direction"]=="SHORT" else "#ffb700"
-            dir_emoji = "🟢" if r["direction"]=="LONG" else "🔴" if r["direction"]=="SHORT" else "⚪"
-            chg_col = "#00ff88" if r["change_pct"]>=0 else "#ff3d5a"
-            chg_sym = "▲" if r["change_pct"]>=0 else "▼"
-            prob_disp = prob*100 if r["direction"]=="LONG" else (100-prob*100) if r["direction"]=="SHORT" else prob*100
-            wr_col = "#00ff88" if r["winrate"]>=0.55 else "#ff3d5a" if r["winrate"]<=0.45 else "#ffb700"
-            e = r.get("entry")
-            entry_str = f"Rp {e['entry']:,.0f}" if e else "—"
-            tp_str    = f"Rp {e['tp1']:,.0f}"   if e else "—"
-            sl_str    = f"Rp {e['sl']:,.0f}"    if e else "—"
-            rr_str    = f"{e['rr1']:.2f}"        if e else "—"
-            table_rows += (
-                f'<tr>'
-                f'<td style="color:#4a5568; text-align:center;">{i+1}</td>'
-                f'<td style="color:#e2e8f0; font-weight:700;">{r["ticker"]}</td>'
-                f'<td style="text-align:right; color:#e2e8f0;">Rp {r["price"]:,.0f}</td>'
-                f'<td style="text-align:right; color:{chg_col};">{chg_sym} {abs(r["change_pct"]):.2f}%</td>'
-                f'<td style="text-align:center; color:{dir_col}; font-weight:700;">{dir_emoji} {r["direction"]}</td>'
-                f'<td style="text-align:right; color:{dir_col}; font-weight:700;">{prob_disp:.1f}%</td>'
-                f'<td style="text-align:right; color:#8b95a8;">{conf*100:.0f}%</td>'
-                f'<td style="text-align:right; color:{wr_col};">{r["winrate"]*100:.0f}%</td>'
-                f'<td style="text-align:right; color:#e2e8f0;">{entry_str}</td>'
-                f'<td style="text-align:right; color:#00ff88;">{tp_str}</td>'
-                f'<td style="text-align:right; color:#ff3d5a;">{sl_str}</td>'
-                f'<td style="text-align:center; color:#8b95a8;">{rr_str}</td>'
-                f'<td style="text-align:center; color:#4a5568; font-size:10px;">{r["trend"]}</td>'
-                f'</tr>'
-            )
-        st.markdown(
-            '<table class="knn-table" style="margin-top:8px;">'
-            '<tr>'
-            '<th style="width:30px;">#</th>'
-            '<th>Ticker</th>'
-            '<th style="text-align:right;">Price</th>'
-            '<th style="text-align:right;">Chg%</th>'
-            '<th style="text-align:center;">Direction</th>'
-            f'<th style="text-align:right;">P({idx_tf_used})</th>'
-            '<th style="text-align:right;">Conf</th>'
-            '<th style="text-align:right;">Win</th>'
-            '<th style="text-align:right;">Entry</th>'
-            '<th style="text-align:right;">TP1</th>'
-            '<th style="text-align:right;">SL</th>'
-            '<th style="text-align:center;">R:R</th>'
-            '<th style="text-align:center;">Trend</th>'
-            '</tr>' + table_rows + '</table>',
-            unsafe_allow_html=True
-        )
-        if len(idx_results) > 50:
-            st.caption(f"Showing top 50 of {len(idx_results)} signals (sorted by directional strength)")
-
-        # Skip breakdown
-        with st.expander("📊 Skip breakdown (debugging)"):
-            st.markdown(f"""
-            - **No data / insufficient bars:** {idx_skip.get('no_data',0)}
-            - **Feature matrix gagal:** {idx_skip.get('features_fail',0)}
-            - **Below min probability:** {idx_skip.get('low_prob',0)}
-            - **Wrong direction (filter):** {idx_skip.get('wrong_dir',0)}
-            - **Total scanned:** {len(IDX_TICKERS)}
-            - **Total signals returned:** {len(idx_results)}
-            """)
-    else:
-        if "idx_scan_results" in st.session_state or "idx_multi_tf_results" in st.session_state:
-            st.warning("Scan selesai tapi tidak ada signal yang lolos filter. Coba turunkan Min Stars/Probability atau ganti Direction filter.")
-        else:
-            st.info("👆 Pilih mode (Quick / Multi-TF) lalu klik tombol scan. Multi-TF butuh ~3-4 menit untuk full 981 saham (2-stage analysis).")
+with tab_crypto:
+    render_market_scan_tab("Crypto")
 
 if st.session_state.last_scan_time:
     lt = datetime.fromtimestamp(st.session_state.last_scan_time, et_tz).strftime("%H:%M:%S ET · %d %b %Y")
