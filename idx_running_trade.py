@@ -813,7 +813,7 @@ def scan_market_universe(market_key="IDX", timeframe="15m", T1=None, k=20, min_p
     if T1 is None: T1 = cfg["default_T1"]
 
     suffix = mcfg["suffix"]
-    tickers_yf = [f"{t}{suffix}" if suffix else t for t in mcfg["tickers"]]
+    tickers_yf = [t if (not suffix or t.endswith(suffix)) else f"{t}{suffix}" for t in mcfg["tickers"]]
     random.shuffle(tickers_yf)  # avoid pattern detection by yFinance
     n_total = len(tickers_yf)
 
@@ -1067,7 +1067,7 @@ def scan_market_multi_tf(market_key="IDX", stage1_min_prob=0.52, top_n_stage2=10
     if full_universe_mode:
         # FULL UNIVERSE MODE — bypass Stage 1
         if progress_cb: progress_cb(0, n_total, "fullscan_init")
-        tickers_yf = [f"{t}{suffix}" if suffix else t for t in mcfg["tickers"]]
+        tickers_yf = [t if (not suffix or t.endswith(suffix)) else f"{t}{suffix}" for t in mcfg["tickers"]]
         random.shuffle(tickers_yf)
 
         final_results = []
