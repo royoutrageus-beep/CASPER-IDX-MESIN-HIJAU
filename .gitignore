@@ -1,0 +1,15 @@
+# ===== RAHASIA — jangan pernah di-commit ke GitHub =====
+config_tele.json
+.streamlit/secrets.toml
+*.env
+
+# ===== Data lokal (hasil scan, boleh di-ignore) =====
+jurnal_sinyal.csv
+jurnal_evaluasi.csv
+jurnal_sinyal_lama.csv
+tickers_idx.txt
+hasil_scan_casper.xlsx
+
+# ===== Python =====
+__pycache__/
+*.pyc
