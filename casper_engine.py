@@ -47,6 +47,15 @@ import os
 import time
 import numpy as np
 import pandas as pd
+import pytz
+
+TZ_WIB = pytz.timezone("Asia/Jakarta")
+
+
+def now_wib():
+    """Selalu jam WIB, di mana pun servernya (Streamlit Cloud = UTC/AS)."""
+    return pd.Timestamp.now(tz=TZ_WIB)
+
 
 DEFAULT_TICKERS = [
     "BBCA.JK", "BBRI.JK", "BMRI.JK", "BBNI.JK", "TLKM.JK", "ASII.JK",
@@ -81,6 +90,8 @@ MIN_RVOL_BUY = 1.5        # BUY wajib volume >= 1.5x rata-rata
 JURNAL = "jurnal_sinyal.csv"
 EVALUASI = "jurnal_evaluasi.csv"
 CONF_TELE = "config_tele.json"
+SHEET_NAME = "casper_jurnal"        # nama Google Spreadsheet untuk jurnal
+_SHEET = None
 
 LAST_CLOSE = None
 
@@ -211,7 +222,7 @@ def skor_ticker(c, h, l, v, mode="Scalping",
     verdict = ("BUY" if iq >= 65 and trend_up and above
                and rvol >= MIN_RVOL_BUY else
                "WAIT" if iq < 40 else "HOLD")
-    now = pd.Timestamp.now()
+    now = now_wib()
     return {"ts": now.strftime("%H:%M:%S"), "date": now.strftime("%Y-%m-%d"),
             "ticker": c.name.replace(".JK", ""),
             "mode": f"{mode} {prof['emoji']}",
@@ -228,16 +239,15 @@ def skor_ticker(c, h, l, v, mode="Scalping",
             "above_vwap": bool(above)}
 
 
-def ukuran_kelly(df, path=EVALUASI, cap=0.10, min_sampel=10):
+def ukuran_kelly(df, cap=0.10, min_sampel=10):
     """Kelly criterion dari rekam jejak jurnal SENDIRI (bukan asumsi).
     f* = p - (1-p)/b, b = avg win / avg loss. Dipakai half-Kelly, cap 10%.
     Butuh >= 10 sampel evaluasi per label; sebelum itu tampil '-'. """
     df["kelly_%"] = "-"
-    if not os.path.exists(path) or df.empty:
+    if df.empty:
         return df
-    try:
-        ev = pd.read_csv(path)
-    except Exception:
+    ev = baca_evaluasi()
+    if ev is None or ev.empty:
         return df
     peta = {}
     for sig, g in ev.groupby("signal"):
@@ -276,8 +286,73 @@ def scan(tickers=None, demo=False, semua=False, mode="Scalping",
     return ukuran_kelly(df)
 
 
-# ----------------------------- JURNAL -----------------------------------
+# ----------------- JURNAL: Google Sheets ☁️ / CSV lokal ------------------
+def _kredensial_gsheet():
+    """Service account dari gsheet_creds.json (lokal) atau st.secrets
+    [gcp_service_account] (Streamlit Cloud)."""
+    if os.path.exists("gsheet_creds.json"):
+        return json.load(open("gsheet_creds.json"))
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            return dict(st.secrets["gcp_service_account"])
+    except Exception:
+        pass
+    return None
+
+
+def jurnal_backend():
+    """Spreadsheet gspread kalau kredensial tersedia, selain itu 'csv'."""
+    global _SHEET
+    if _SHEET is not None:
+        return _SHEET
+    info = _kredensial_gsheet()
+    if info:
+        try:
+            import gspread
+            from google.oauth2.service_account import Credentials
+            sc = ["https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive"]
+            gc = gspread.authorize(
+                Credentials.from_service_account_info(info, scopes=sc))
+            _SHEET = gc.open(SHEET_NAME)
+            print(f"[i] Jurnal tersambung ke Google Sheets '{SHEET_NAME}'.")
+            return _SHEET
+        except Exception as e:
+            print(f"[!] Google Sheets gagal ({e}) — pakai CSV lokal.")
+    _SHEET = "csv"
+    return _SHEET
+
+
+def backend_label():
+    return ("Google Sheets ☁️" if jurnal_backend() != "csv"
+            else "CSV lokal 📁")
+
+
+def _worksheet(sh, nama, header):
+    import gspread
+    try:
+        ws = sh.worksheet(nama)
+        if header and ws.row_values(1) != [str(h) for h in header]:
+            ws.update_title(                       # skema berubah: arsipkan
+                f"{nama}_lama_{now_wib():%m%d%H%M}")
+            raise gspread.WorksheetNotFound(nama)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(nama, rows=2000, cols=max(len(header), 5))
+        if header:
+            ws.append_row([str(h) for h in header])
+    return ws
+
+
 def catat_jurnal(df, path=JURNAL):
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            ws = _worksheet(sh, "sinyal", df.columns.tolist())
+            ws.append_rows(df.astype(str).values.tolist())
+            return
+        except Exception as e:
+            print(f"[!] Gagal tulis Sheets ({e}) — fallback CSV.")
     if os.path.exists(path):
         lama = pd.read_csv(path, nrows=0).columns.tolist()
         if lama != df.columns.tolist():          # skema berubah -> arsipkan
@@ -285,21 +360,51 @@ def catat_jurnal(df, path=JURNAL):
     df.to_csv(path, mode="a", index=False, header=not os.path.exists(path))
 
 
+def baca_jurnal(path=JURNAL):
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            rows = sh.worksheet("sinyal").get_all_records()
+            if rows:
+                return pd.DataFrame(rows)
+        except Exception:
+            pass
+        return None
+    return pd.read_csv(path) if os.path.exists(path) else None
+
+
+def baca_evaluasi(out=EVALUASI):
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            rows = sh.worksheet("evaluasi").get_all_records()
+            if rows:
+                ev = pd.DataFrame(rows)
+                ev["return_%"] = pd.to_numeric(ev["return_%"],
+                                               errors="coerce")
+                return ev
+        except Exception:
+            pass
+        return None
+    return pd.read_csv(out) if os.path.exists(out) else None
+
+
 def evaluasi_jurnal(close_df, path=JURNAL, out=EVALUASI):
     """Bukti matematis: harga saat sinyal vs harga terkini."""
-    if not os.path.exists(path) or close_df is None:
+    j = baca_jurnal(path)
+    if j is None or close_df is None or len(j) == 0:
         return None
-    j = pd.read_csv(path)
-    today = pd.Timestamp.now().strftime("%Y-%m-%d")
-    j = j[j["date"] < today]
+    j["price"] = pd.to_numeric(j["price"], errors="coerce")
+    today = now_wib().strftime("%Y-%m-%d")
+    j = j[j["date"].astype(str) < today]
     if j.empty:
         return None
     j = j.drop_duplicates(subset=["date", "ticker"], keep="last")
     kolmap = {c.replace(".JK", ""): c for c in close_df.columns}
     rows = []
     for _, r in j.iterrows():
-        col = kolmap.get(r["ticker"])
-        if col is None:
+        col = kolmap.get(str(r["ticker"]))
+        if col is None or not np.isfinite(r["price"]) or r["price"] <= 0:
             continue
         now = float(close_df[col].dropna().iloc[-1])
         ret = (now / r["price"] - 1) * 100
@@ -311,7 +416,18 @@ def evaluasi_jurnal(close_df, path=JURNAL, out=EVALUASI):
     if not rows:
         return None
     ev = pd.DataFrame(rows)
-    ev.to_csv(out, index=False)
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            ws = _worksheet(sh, "evaluasi", [])
+            ws.clear()
+            ws.append_row(ev.columns.tolist())
+            ws.append_rows(ev.astype(str).values.tolist())
+        except Exception as e:
+            print(f"[!] Gagal tulis evaluasi ke Sheets: {e}")
+            ev.to_csv(out, index=False)
+    else:
+        ev.to_csv(out, index=False)
     return ev
 
 
@@ -356,7 +472,7 @@ def kirim_tele(df, top=8, conf=CONF_TELE):
         print("[!] Kredensial Telegram tidak ditemukan "
               "(config_tele.json / env var / st.secrets).")
         return False
-    now = pd.Timestamp.now()
+    now = now_wib()
     pilih = df[df["iq_verdict"] == "BUY"].head(top)
     sub = "sinyal BUY 🟢" if len(pilih) else "tidak ada BUY — top skor:"
     if pilih.empty:
