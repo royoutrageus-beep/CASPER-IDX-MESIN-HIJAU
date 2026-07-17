@@ -1,5 +1,6 @@
 # ===== RAHASIA — jangan pernah di-commit ke GitHub =====
 config_tele.json
+gsheet_creds.json
 .streamlit/secrets.toml
 *.env
 
