@@ -77,8 +77,8 @@ st.markdown(f"""
     <div class="logo">👻 CASPER <span>IDX</span> — MESIN HIJAU</div>
     <div class="sub">EDUKASI • DATA • SISTEM • DISIPLIN</div>
   </div>
-  <div class="live">● LIVE {pd.Timestamp.now():%H:%M:%S} WIB<br>
-  {pd.Timestamp.now():%d %b %Y}</div>
+  <div class="live">● LIVE {ce.now_wib():%H:%M:%S} WIB<br>
+  {ce.now_wib():%d %b %Y}</div>
 </div>""", unsafe_allow_html=True)
 
 # ------------------------------ SIDEBAR ---------------------------------
@@ -108,6 +108,7 @@ with st.sidebar:
     ada = ce.ambil_config_tele() is not None
     st.caption(("✅ kredensial Telegram ditemukan" if ada else
                 "❌ isi config_tele.json / secrets dulu"))
+    st.caption("🗄️ Jurnal: " + ce.backend_label())
     tombol_tele = st.button("🔔 Kirim sinyal ke Telegram",
                             use_container_width=True,
                             disabled="hasil" not in st.session_state)
@@ -129,7 +130,7 @@ if tombol_scan:
     st.session_state["cfg"] = {"tickers": tickers, "demo": demo,
                                "semua": semua, "mode": mode,
                                "min_turnover_jt": min_to}
-    st.session_state["last_scan"] = pd.Timestamp.now()
+    st.session_state["last_scan"] = ce.now_wib()
     st.success(f"✅ {len(df)} saham lolos filter — otomatis ke-log di Journal.")
     if auto_tele:
         if ce.kirim_tele(df):
@@ -155,13 +156,13 @@ def auto_scan():
         return
     last = ss.get("last_scan")
     if last is not None and \
-       (pd.Timestamp.now() - last).total_seconds() < _menit * 60 - 10:
+       (ce.now_wib() - last).total_seconds() < _menit * 60 - 10:
         return                      # belum waktunya, tunggu jadwal
     df = ce.scan(**ss["cfg"])
     ce.catat_jurnal(df)
     ss["hasil"] = df
     ss["eval"] = ce.evaluasi_jurnal(ce.LAST_CLOSE)
-    ss["last_scan"] = pd.Timestamp.now()
+    ss["last_scan"] = ce.now_wib()
     if auto_tele:
         ce.kirim_tele(df)
     st.rerun(scope="app")
@@ -281,9 +282,10 @@ turnover harian di bawah ambang likuiditas dibuang sebelum dinilai.
 
 # ------------------------------ JOURNAL ----------------------------------
 with tab2:
-    if os.path.exists(ce.JURNAL):
-        j = pd.read_csv(ce.JURNAL)
-        st.caption(f"📓 {len(j)} sinyal terekam otomatis — sistem nggak bisa "
+    j = ce.baca_jurnal()
+    if j is not None and len(j):
+        st.caption(f"📓 {len(j)} sinyal terekam otomatis di "
+                   f"{ce.backend_label()} — sistem nggak bisa "
                    "pilih-pilih atau 'lupa'. Semua kebukti di sini.")
         st.dataframe(j.sort_values(["date", "ts"], ascending=False),
                      use_container_width=True, height=520, hide_index=True)
@@ -293,8 +295,8 @@ with tab2:
 # --------------------------- BUKTI STATISTIK -----------------------------
 with tab3:
     ev = st.session_state.get("eval")
-    if ev is None and os.path.exists(ce.EVALUASI):
-        ev = pd.read_csv(ce.EVALUASI)
+    if ev is None:
+        ev = ce.baca_evaluasi()
     if ev is not None and len(ev):
         g = ce.ringkas_evaluasi(ev)
         st.markdown("#### 🏆 WIN RATE PER LABEL — sinyal lama vs harga kini")
