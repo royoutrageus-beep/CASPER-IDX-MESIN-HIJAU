@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-CASPER ENGINE v3 — scanner + jurnal + Telegram + lapisan risiko kuantitatif
+CASPER ENGINE v3.1 — scanner + jurnal + Telegram + lapisan risiko kuantitatif
++ AUTO-MODE (regime pasar) — patch dari Mesin Presisi
 ===========================================================================
 SKOR (transparan, bisa diaudit):
   score (0-10)  = 2*(trend naik) + 2*min(rvol/2,1) + 2*(RSI di zona mode)
@@ -28,6 +29,12 @@ LAPISAN RISIKO (5 hukum kuantitatif):
   * Kelly criterion           -> kolom kelly_%: f* = p - (1-p)/b dihitung
     dari rekam jejak jurnal LO SENDIRI per label sinyal (>=10 sampel),
     dipakai half-Kelly, cap 10% modal. Sizing, bukan prediksi.
+
+AUTO-MODE (BARU): get_market_regime() baca IHSG (^JKSE) harian, bandingin
+posisi vs EMA20/EMA55 + return 20 hari, terus balikin mode Casper yang
+paling cocok (Scalping/Momentum/Intraday/Swing/Bagger). Dipakai casper_app.py
+buat auto-pilih mode scan tiap kali browser dibuka / tiap siklus auto-scan
+— boleh tetap di-override manual dari sidebar.
 
 Jurnal: tiap scan tercatat ke jurnal_sinyal.csv; scan berikutnya otomatis
 mengevaluasi sinyal lama -> jurnal_evaluasi.csv (win rate per label) ->
@@ -85,6 +92,60 @@ MODES = {
     "Bagger":    dict(emoji="💎", rsi=(50, 80), atr=(2.0, 8.0),
                       ret_n=60, ret_t=0.30, ma=(50, 200)),
 }
+
+
+# ══════════════════ AUTO-MODE: REGIME PASAR (dari Mesin Presisi) ═══════
+def get_market_regime():
+    """Auto-deteksi kondisi market dari IHSG (^JKSE) -> rekomendasi mode Casper.
+
+      RALLY (di atas EMA20 & EMA55 + ret20 kuat >= 8%) -> Bagger 💎
+      UPTREND mapan  (di atas EMA20 & EMA55)           -> Swing 🌙
+      Recovery/breakout awal (di atas EMA20 doang)     -> Momentum 🚀
+      BEARISH (di bawah EMA20 & EMA55, turun)          -> Scalping ⚡
+      SIDEWAYS / netral (selain di atas)               -> Intraday 🌤️
+
+    Return: (mode, harga_ihsg, ema20, ema55, penjelasan)
+    Kalau data IHSG gagal diambil -> fallback ("Scalping", 0, 0, 0, alasan).
+    """
+    import yfinance as yf
+    try:
+        df = yf.Ticker("^JKSE").history(period="60d", interval="1d",
+                                        auto_adjust=True)
+        close = df["Close"].dropna()
+        if len(close) < 20:
+            return ("Scalping", 0.0, 0.0, 0.0,
+                    "Data IHSG kurang -> default Scalping")
+        price = float(close.iloc[-1])
+        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        ema55 = float(close.ewm(span=min(55, len(close) - 1),
+                                adjust=False).mean().iloc[-1])
+        chg = float((close.iloc[-1] / close.iloc[-2] - 1) * 100)
+        ret20 = (float((close.iloc[-1] / close.iloc[-21] - 1) * 100)
+                 if len(close) > 21 else 0.0)
+        above20, above55 = price > ema20, price > ema55
+
+        if above20 and above55 and ret20 >= 8:
+            return ("Bagger", price, ema20, ema55,
+                    f"RALLY 🚀 — IHSG {price:,.0f} +{ret20:.1f}%/20 hari, "
+                    f"di atas EMA20 & EMA55")
+        if above20 and above55:
+            return ("Swing", price, ema20, ema55,
+                    f"UPTREND mapan — IHSG {price:,.0f} di atas EMA20 & "
+                    f"EMA55 ({ret20:+.1f}%/20 hari)")
+        if above20 and not above55 and chg > 0:
+            return ("Momentum", price, ema20, ema55,
+                    f"Recovery/breakout awal — IHSG {price:,.0f} di atas "
+                    f"EMA20, belum tembus EMA55")
+        if not above20 and not above55 and chg < -0.3:
+            return ("Scalping", price, ema20, ema55,
+                    f"BEARISH — IHSG {price:,.0f} di bawah EMA20 & EMA55 "
+                    f"({chg:+.2f}%)")
+        return ("Intraday", price, ema20, ema55,
+                f"SIDEWAYS — IHSG {price:,.0f} netral, belum ada arah jelas")
+    except Exception as e:
+        return "Scalping", 0.0, 0.0, 0.0, f"IHSG error ({e}) -> default Scalping"
+
+
 MIN_TURNOVER_JT = 500     # likuiditas: rata2 nilai transaksi/hari (juta Rp)
 MIN_RVOL_BUY = 1.5        # BUY wajib volume >= 1.5x rata-rata
 JURNAL = "jurnal_sinyal.csv"
@@ -520,13 +581,19 @@ def main():
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--mode", default="Scalping",
                     choices=list(MODES))
+    ap.add_argument("--auto-mode", action="store_true",
+                    help="abaikan --mode, pilih otomatis dari regime IHSG")
     ap.add_argument("--min-turnover", type=int, default=MIN_TURNOVER_JT,
                     help="minimal turnover harian (juta Rp)")
     args = ap.parse_args()
 
-    print("=== CASPER ENGINE v3 ===")
+    print("=== CASPER ENGINE v3.1 ===")
+    mode = args.mode
+    if args.auto_mode:
+        mode, price, e20, e55, label = get_market_regime()
+        print(f"[i] Auto-mode: {mode} — {label}")
     df = scan(tickers=args.tickers, demo=args.demo, semua=args.all,
-              mode=args.mode, min_turnover_jt=args.min_turnover)
+              mode=mode, min_turnover_jt=args.min_turnover)
     print(df.head(20).to_string(index=False))
     catat_jurnal(df)
     ev = evaluasi_jurnal(LAST_CLOSE)
