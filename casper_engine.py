@@ -112,35 +112,51 @@ def get_market_regime():
         df = yf.Ticker("^JKSE").history(period="60d", interval="1d",
                                         auto_adjust=True)
         close = df["Close"].dropna()
-        if len(close) < 20:
+        if len(close) < 15:
             return ("Scalping", 0.0, 0.0, 0.0,
                     "Data IHSG kurang -> default Scalping")
         price = float(close.iloc[-1])
-        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
-        ema55 = float(close.ewm(span=min(55, len(close) - 1),
+        # EMA dipersempit (10/30, dari 20/55) -> lebih "mepet" ke harga
+        # sekarang, gak nunggu lama buat ngonfirmasi pembalikan arah.
+        ema_f = float(close.ewm(span=10, adjust=False).mean().iloc[-1])
+        ema_s = float(close.ewm(span=min(30, len(close) - 1),
                                 adjust=False).mean().iloc[-1])
         chg = float((close.iloc[-1] / close.iloc[-2] - 1) * 100)
+        chg3 = (float((close.iloc[-1] / close.iloc[-4] - 1) * 100)
+                if len(close) > 4 else chg)
         ret20 = (float((close.iloc[-1] / close.iloc[-21] - 1) * 100)
                  if len(close) > 21 else 0.0)
-        above20, above55 = price > ema20, price > ema55
 
-        if above20 and above55 and ret20 >= 8:
-            return ("Bagger", price, ema20, ema55,
+        # Band toleransi 1.2% -> harga yang lagi nempel/baru lewatin EMA
+        # cepat gak usah nunggu "clear cross" dulu buat dianggap ijo.
+        band = 0.012
+        above_f_clear = price > ema_f * (1 + band)
+        above_f_any = price > ema_f * (1 - band)
+        above_s = price > ema_s
+        recovering = chg3 > 0.5          # udah 3 hari mulai naik lagi
+        bearish_confirm = chg < -0.3 and not above_f_any
+
+        if above_f_clear and above_s and ret20 >= 6:
+            return ("Bagger", price, ema_f, ema_s,
                     f"RALLY 🚀 — IHSG {price:,.0f} +{ret20:.1f}%/20 hari, "
-                    f"di atas EMA20 & EMA55")
-        if above20 and above55:
-            return ("Swing", price, ema20, ema55,
-                    f"UPTREND mapan — IHSG {price:,.0f} di atas EMA20 & "
-                    f"EMA55 ({ret20:+.1f}%/20 hari)")
-        if above20 and not above55 and chg > 0:
-            return ("Momentum", price, ema20, ema55,
-                    f"Recovery/breakout awal — IHSG {price:,.0f} di atas "
-                    f"EMA20, belum tembus EMA55")
-        if not above20 and not above55 and chg < -0.3:
-            return ("Scalping", price, ema20, ema55,
-                    f"BEARISH — IHSG {price:,.0f} di bawah EMA20 & EMA55 "
+                    f"di atas EMA10 & EMA30")
+        if above_f_any and above_s:
+            return ("Swing", price, ema_f, ema_s,
+                    f"UPTREND mapan — IHSG {price:,.0f} di atas EMA10 & "
+                    f"EMA30 ({ret20:+.1f}%/20 hari)")
+        if above_f_any and not above_s:
+            return ("Momentum", price, ema_f, ema_s,
+                    f"Recovery/breakout — IHSG {price:,.0f} udah di atas "
+                    f"EMA10, EMA30 lagi nyusul (3D {chg3:+.1f}%)")
+        if not above_f_any and recovering:
+            return ("Intraday", price, ema_f, ema_s,
+                    f"Mulai pulih tapi belum clear — IHSG {price:,.0f} "
+                    f"3D {chg3:+.1f}%, masih di bawah EMA10")
+        if bearish_confirm:
+            return ("Scalping", price, ema_f, ema_s,
+                    f"BEARISH — IHSG {price:,.0f} di bawah EMA10 & EMA30 "
                     f"({chg:+.2f}%)")
-        return ("Intraday", price, ema20, ema55,
+        return ("Intraday", price, ema_f, ema_s,
                 f"SIDEWAYS — IHSG {price:,.0f} netral, belum ada arah jelas")
     except Exception as e:
         return "Scalping", 0.0, 0.0, 0.0, f"IHSG error ({e}) -> default Scalping"
