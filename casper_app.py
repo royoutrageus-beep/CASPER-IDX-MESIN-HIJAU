@@ -96,10 +96,13 @@ st.markdown(f"""
 with st.sidebar:
     st.markdown("### ⚙️ SCANNER SETTINGS")
     sumber = st.radio("Sumber data", ["Live (Yahoo Finance)", "Demo (simulasi)"])
-    universe = st.radio("Cakupan", ["12 default", "Semua IDX (~700)", "Custom"])
+    universe = st.radio("Cakupan", ["Semua IDX (~700)", "Custom"])
     custom = st.text_area("Ticker custom (tanpa .JK juga boleh)",
                           "BBCA BBRI TLKM",
                           disabled=universe != "Custom")
+    st.caption("Cakupan default sekarang Semua IDX (~700) — 12-saham "
+              "default lama dibuang biar Auto-Mode mindai seluruh pasar, "
+              "bukan cuma segelintir blue chip.")
 
     st.markdown("### 🎯 MODE SINYAL")
     auto_mode_on = st.toggle("🤖 Auto-Mode (ikuti regime IHSG)", value=True,
@@ -118,7 +121,9 @@ with st.sidebar:
 
     min_to = st.number_input("Min turnover/hari (juta Rp)",
                              min_value=0, value=500, step=100)
-    hanya_buy = st.toggle("Hanya tampilkan BUY", value=False)
+    st.caption("Tampilan dikunci ke sinyal BUY aja (iq_verdict) biar gak "
+              "kebanjiran data dari ~700 saham. Sinyal non-BUY tetap "
+              "ke-log lengkap di tab Journal.")
     tombol_scan = st.button("🚀 SCAN MANUAL SEKARANG", use_container_width=True)
     st.divider()
     st.markdown("### 🔄 AUTO-SCAN")
@@ -160,7 +165,7 @@ if tombol_scan or auto_trigger:
     tickers, semua = None, False
     if universe == "Custom":
         tickers = custom.split()
-    elif universe.startswith("Semua"):
+    else:
         semua = True
     with st.spinner(f"👻 Casper lagi mindai pasar (mode {mode})... "
                     f"(Semua IDX ± 10-20 mnt)"):
@@ -231,25 +236,26 @@ with tab1:
         st.info("👻 Menunggu scan pertama jalan otomatis...")
     else:
         df = st.session_state["hasil"]
-        tampil = df[df["iq_verdict"] == "BUY"] if hanya_buy else df
-        if hanya_buy and tampil.empty:
-            st.warning("⚠️ Nggak ada sinyal BUY di scan ini — semua hasil "
-                       "ditampilkan. (Toggle 'Hanya tampilkan BUY' di "
-                       "sidebar yang bikin tabel kosong tadi.)")
-            tampil = df
+        tampil = df[df["iq_verdict"] == "BUY"].copy()
 
-        n_buy = int((df["iq_verdict"] == "BUY").sum())
-        n_gcr = int(df["signal"].str.startswith("GACOR").sum())
-        n_pot = int(df["signal"].str.startswith("POTENSIAL").sum())
+        n_buy = len(tampil)
+        n_gcr = int(tampil["signal"].str.startswith("GACOR").sum()) if n_buy else 0
+        n_pot = int(tampil["signal"].str.startswith("POTENSIAL").sum()) if n_buy else 0
+        avg_rsi_buy = float(tampil["rsi_ema"].mean()) if n_buy else 0.0
+        top_skor_buy = float(tampil["score"].max()) if n_buy else 0.0
         st.markdown(f"""
 <div class="statgrid">
- <div class="stat"><div class="lbl">Lolos Filter</div><div class="val">{len(df)}</div></div>
+ <div class="stat"><div class="lbl">Discan (semua)</div><div class="val">{len(df)}</div></div>
  <div class="stat"><div class="lbl">Sinyal BUY</div><div class="val">{n_buy}</div></div>
  <div class="stat"><div class="lbl">Gacor ⚡</div><div class="val">{n_gcr}</div></div>
  <div class="stat"><div class="lbl">Potensial 🔥</div><div class="val">{n_pot}</div></div>
- <div class="stat"><div class="lbl">Avg RSI-EMA</div><div class="val">{df["rsi_ema"].mean():.1f}</div></div>
- <div class="stat"><div class="lbl">Skor Top</div><div class="val">{df["score"].max():.1f}</div></div>
+ <div class="stat"><div class="lbl">Avg RSI-EMA (BUY)</div><div class="val">{avg_rsi_buy:.1f}</div></div>
+ <div class="stat"><div class="lbl">Skor Top (BUY)</div><div class="val">{top_skor_buy:.1f}</div></div>
 </div>""", unsafe_allow_html=True)
+        if not n_buy:
+            st.warning("⚠️ Nggak ada sinyal BUY di scan ini — market lagi "
+                      "gak ngasih setup yang layak. Semua hasil (termasuk "
+                      "WAIT/HOLD) tetap ke-log di tab Journal buat evaluasi.")
 
         st.markdown("#### 🎯 TOP SIGNALS")
         kartu = ""
