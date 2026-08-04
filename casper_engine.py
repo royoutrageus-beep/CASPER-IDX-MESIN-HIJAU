@@ -249,6 +249,15 @@ def skor_ticker(c, h, l, v, mode="Scalping",
         return None
     c, h, l, v = c.iloc[-n:], h.iloc[-n:], l.iloc[-n:], v.iloc[-n:]
     harga = float(c.iloc[-1])
+    # ── Sanity filter: tolak lompatan harga ekstrem sehari (indikasi
+    #    glitch feed data, kayak yang ketemu di jurnal — MLPT sempat
+    #    kebaca ~20x harga wajarnya di 2 tanggal). IDX gak punya gerakan
+    #    organik >80% sehari di luar corporate action; kalau kejadian,
+    #    mending saham itu diskip scan ini daripada nyemarin jurnal.
+    if n >= 6:
+        median_5 = float(c.iloc[-6:-1].median())
+        if median_5 > 0 and (harga / median_5 > 1.8 or harga / median_5 < 0.55):
+            return None
     turnover = float((c * v).iloc[-20:].mean())
     if turnover < min_turnover_jt * 1e6:
         return None                          # kurang likuid, buang
@@ -324,15 +333,16 @@ def ukuran_kelly(df, cap=0.10, min_sampel=10):
     if df.empty:
         return df
     ev = baca_evaluasi()
-    if ev is None or ev.empty:
+    if ev is None or ev.empty or "t3_ret" not in ev.columns:
         return df
+    d = ev.dropna(subset=["t3_ret"])
     peta = {}
-    for sig, g in ev.groupby("signal"):
+    for sig, g in d.groupby("signal"):
         if len(g) < min_sampel:
             continue
-        p = float((g["return_%"] > 0).mean())
-        win = g.loc[g["return_%"] > 0, "return_%"].mean()
-        loss = -g.loc[g["return_%"] <= 0, "return_%"].mean()
+        p = float((g["t3_ret"] > 0).mean())
+        win = g.loc[g["t3_ret"] > 0, "t3_ret"].mean()
+        loss = -g.loc[g["t3_ret"] <= 0, "t3_ret"].mean()
         if not np.isfinite(win) or not np.isfinite(loss) or loss <= 0:
             continue
         f = max(p - (1 - p) / (win / loss), 0)
@@ -422,19 +432,53 @@ def _worksheet(sh, nama, header):
 
 
 def catat_jurnal(df, path=JURNAL):
+    """Tulis ke jurnal DENGAN DEDUP per (date, ticker, mode).
+
+    PATCH: auto-scan jalan tiap 15 menit (bisa berkali-kali per hari
+    bursa) — tanpa dedup, jurnal numpuk baris identik utk ticker yang
+    sama di hari yang sama, bikin N kelihatan gede padahal itu sinyal
+    yang sama diitung berkali-kali (bukan observasi independen). Baris
+    pertama utk kombinasi date+ticker+mode yang menang, sisanya di-skip.
+    """
+    lama_df = None
     sh = jurnal_backend()
     if sh != "csv":
         try:
-            ws = _worksheet(sh, "sinyal", df.columns.tolist())
-            ws.append_rows(df.astype(str).values.tolist())
-            return
+            rows = sh.worksheet("sinyal").get_all_records()
+            if rows:
+                lama_df = pd.DataFrame(rows)
+        except Exception:
+            lama_df = None
+    elif os.path.exists(path):
+        try:
+            lama_df = pd.read_csv(path)
+        except Exception:
+            lama_df = None
+
+    existing = set()
+    if lama_df is not None and len(lama_df):
+        existing = set(zip(lama_df["date"].astype(str),
+                           lama_df["ticker"].astype(str),
+                           lama_df["mode"].astype(str)))
+    mask_baru = ~df.apply(lambda r: (str(r["date"]), str(r["ticker"]),
+                                     str(r["mode"])) in existing, axis=1)
+    baru = df[mask_baru]
+    if baru.empty:
+        return 0
+
+    if sh != "csv":
+        try:
+            ws = _worksheet(sh, "sinyal", baru.columns.tolist())
+            ws.append_rows(baru.astype(str).values.tolist())
+            return len(baru)
         except Exception as e:
             print(f"[!] Gagal tulis Sheets ({e}) — fallback CSV.")
     if os.path.exists(path):
-        lama = pd.read_csv(path, nrows=0).columns.tolist()
-        if lama != df.columns.tolist():          # skema berubah -> arsipkan
+        lama_cols = pd.read_csv(path, nrows=0).columns.tolist()
+        if lama_cols != baru.columns.tolist():   # skema berubah -> arsipkan
             os.replace(path, path.replace(".csv", "_lama.csv"))
-    df.to_csv(path, mode="a", index=False, header=not os.path.exists(path))
+    baru.to_csv(path, mode="a", index=False, header=not os.path.exists(path))
+    return len(baru)
 
 
 def baca_jurnal(path=JURNAL):
@@ -457,49 +501,123 @@ def baca_evaluasi(out=EVALUASI):
             rows = sh.worksheet("evaluasi").get_all_records()
             if rows:
                 ev = pd.DataFrame(rows)
-                ev["return_%"] = pd.to_numeric(ev["return_%"],
-                                               errors="coerce")
+                for col in ("t1_ret", "t3_ret", "t5_ret"):
+                    if col in ev.columns:
+                        ev[col] = pd.to_numeric(ev[col], errors="coerce")
                 return ev
         except Exception:
             pass
         return None
-    return pd.read_csv(out) if os.path.exists(out) else None
+    if os.path.exists(out):
+        ev = pd.read_csv(out)
+        for col in ("t1_ret", "t3_ret", "t5_ret"):
+            if col in ev.columns:
+                ev[col] = pd.to_numeric(ev[col], errors="coerce")
+        return ev
+    return None
 
 
-def evaluasi_jurnal(close_df, path=JURNAL, out=EVALUASI):
-    """Bukti matematis: harga saat sinyal vs harga terkini."""
+def _muat_close_evaluasi(tickers):
+    """Ambil close harian 90 hari terakhir buat semua ticker yang perlu
+    dievaluasi, sekaligus per batch (hemat request vs one-by-one)."""
+    import yfinance as yf
+    hasil = {}
+    tickers_jk = normalisasi(tickers)
+    for i in range(0, len(tickers_jk), BATCH):
+        chunk = tickers_jk[i:i + BATCH]
+        try:
+            data = yf.download(chunk, period="90d", auto_adjust=True,
+                               progress=False)["Close"]
+            if isinstance(data, pd.Series):
+                data = data.to_frame(chunk[0])
+            for col in data.columns:
+                s = data[col].dropna()
+                if len(s):
+                    hasil[col.replace(".JK", "")] = s
+        except Exception:
+            pass
+    return hasil
+
+
+def evaluasi_jurnal(close_df=None, path=JURNAL, out=EVALUASI, max_tickers=200):
+    """Evaluasi FIXED HORIZON T+1 / T+3 / T+5 (hari bursa) dari tanggal
+    sinyal — GANTI metodologi lama yang bandingin 'harga sinyal vs harga
+    pas fungsi ini kebetulan dijalanin' (horizon ngambang: sinyal 17 hari
+    lalu dan sinyal kemarin diukur dengan cara sama, jadi drift pasar umum
+    ketimbun campur sama kualitas sinyal). Sekarang tiap sinyal dapat 3
+    angka return pada jarak waktu yang SAMA — apples to apples.
+
+    close_df dibiarkan sebagai parameter (backward-compat dgn pemanggilan
+    lama `evaluasi_jurnal(ce.LAST_CLOSE)`), tapi TIDAK dipakai lagi —
+    fungsi ini ambil closing price sendiri per ticker yang butuh evaluasi.
+    """
     j = baca_jurnal(path)
-    if j is None or close_df is None or len(j) == 0:
-        return None
+    if j is None or len(j) == 0:
+        return baca_evaluasi(out)
+
+    lama_ev = baca_evaluasi(out)
+    sudah = set()
+    if lama_ev is not None and len(lama_ev):
+        sudah = set(zip(lama_ev["date"].astype(str),
+                        lama_ev["ticker"].astype(str)))
+
     j["price"] = pd.to_numeric(j["price"], errors="coerce")
     today = now_wib().strftime("%Y-%m-%d")
     j = j[j["date"].astype(str) < today]
     if j.empty:
-        return None
-    j = j.drop_duplicates(subset=["date", "ticker"], keep="last")
-    kolmap = {c.replace(".JK", ""): c for c in close_df.columns}
+        return lama_ev
+    j = j.drop_duplicates(subset=["date", "ticker"], keep="first")
+    j = j[~j.apply(lambda r: (str(r["date"]), str(r["ticker"])) in sudah, axis=1)]
+    if j.empty:
+        return lama_ev
+
+    tickers = j["ticker"].astype(str).unique().tolist()[:max_tickers]
+    closes = _muat_close_evaluasi(tickers)
+
     rows = []
     for _, r in j.iterrows():
-        col = kolmap.get(str(r["ticker"]))
-        if col is None or not np.isfinite(r["price"]) or r["price"] <= 0:
+        tkr = str(r["ticker"])
+        s = closes.get(tkr)
+        entry = r["price"]
+        if s is None or len(s) < 2 or not np.isfinite(entry) or entry <= 0:
             continue
-        now = float(close_df[col].dropna().iloc[-1])
-        ret = (now / r["price"] - 1) * 100
-        rows.append({**r[["date", "ticker", "signal", "iq_verdict",
-                          "score", "price"]].to_dict(),
-                     "harga_kini": round(now, 0),
-                     "return_%": round(ret, 2),
-                     "hasil": "NAIK ✅" if ret > 0 else "TURUN ❌"})
+        try:
+            sdate = pd.Timestamp(r["date"]).date()
+        except Exception:
+            continue
+        idx_dates = [pd.Timestamp(x).date() for x in s.index]
+        pos = next((i for i, d0 in enumerate(idx_dates) if d0 > sdate), None)
+        if pos is None:
+            continue                      # belum ada bar sesudah tgl sinyal
+
+        def _ret(off):
+            j2 = pos + off
+            if j2 >= len(s):
+                return np.nan
+            return round((float(s.iloc[j2]) - float(entry)) / float(entry) * 100, 2)
+
+        rows.append({
+            "date": r["date"], "ticker": tkr, "mode": r.get("mode", ""),
+            "signal": r.get("signal", ""), "sinyal_v2": r.get("sinyal_v2", ""),
+            "mesin_grade": r.get("mesin_grade", ""),
+            "iq_verdict": r.get("iq_verdict", ""),
+            "score": r.get("score", ""), "price": float(entry),
+            "t1_ret": _ret(0), "t3_ret": _ret(2), "t5_ret": _ret(4),
+        })
     if not rows:
-        return None
-    ev = pd.DataFrame(rows)
+        return lama_ev
+
+    ev_baru = pd.DataFrame(rows)
+    ev = (pd.concat([lama_ev, ev_baru], ignore_index=True)
+          if lama_ev is not None and len(lama_ev) else ev_baru)
+
     sh = jurnal_backend()
     if sh != "csv":
         try:
             ws = _worksheet(sh, "evaluasi", [])
             ws.clear()
             ws.append_row(ev.columns.tolist())
-            ws.append_rows(ev.astype(str).values.tolist())
+            ws.append_rows(ev.fillna("").astype(str).values.tolist())
         except Exception as e:
             print(f"[!] Gagal tulis evaluasi ke Sheets: {e}")
             ev.to_csv(out, index=False)
@@ -509,15 +627,29 @@ def evaluasi_jurnal(close_df, path=JURNAL, out=EVALUASI):
 
 
 def ringkas_evaluasi(ev):
+    """Ringkasan win rate per label, per HORIZON (T+1/T+3/T+5) — bukan
+    satu return_% ambigu lagi. Baca kolom 'horizon' buat bedain jaraknya."""
     if ev is None or ev.empty:
         return None
-    g = ev.groupby("signal").agg(
-        jumlah=("return_%", "size"),
-        naik=("return_%", lambda x: int((x > 0).sum())),
-        avg_return=("return_%", "mean")).reset_index()
-    g["win_rate"] = (g["naik"] / g["jumlah"] * 100).round(1)
-    g["avg_return"] = g["avg_return"].round(2)
-    return g
+    potongan = []
+    for col in ("t1_ret", "t3_ret", "t5_ret"):
+        if col not in ev.columns:
+            continue
+        d = ev.dropna(subset=[col])
+        if d.empty:
+            continue
+        g = d.groupby("signal").agg(
+            jumlah=(col, "size"),
+            naik=(col, lambda x: int((x > 0).sum())),
+            avg_return=(col, "mean")).reset_index()
+        g["win_rate"] = (g["naik"] / g["jumlah"] * 100).round(1)
+        g["avg_return"] = g["avg_return"].round(2)
+        g["horizon"] = col.replace("_ret", "").upper()
+        potongan.append(g)
+    if not potongan:
+        return None
+    return pd.concat(potongan, ignore_index=True)[
+        ["horizon", "signal", "jumlah", "naik", "win_rate", "avg_return"]]
 
 
 # ---------------------------- TELEGRAM ----------------------------------

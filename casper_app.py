@@ -359,12 +359,25 @@ with tab3:
         ev = ce.baca_evaluasi()
     if ev is not None and len(ev):
         g = ce.ringkas_evaluasi(ev)
-        st.markdown("#### 🏆 WIN RATE PER LABEL — sinyal lama vs harga kini")
-        st.caption("Di sinilah kelihatan apakah GACOR beneran lebih sering "
-                   "naik daripada WATCH. Data yang bicara, bukan feeling.")
-        st.dataframe(g, use_container_width=True, hide_index=True)
+        st.markdown("#### 🏆 WIN RATE PER LABEL — horizon T+1 / T+3 / T+5")
+        st.caption("Fixed horizon (hari bursa dari tanggal sinyal) — bukan "
+                   "'harga sekarang' yang ngambang lagi, biar sinyal lama "
+                   "dan baru dibandingin apples-to-apples. Kalau GACOR/BUY "
+                   "gak konsisten lebih baik dari WATCH/WAIT di semua "
+                   "horizon, itu tanda score-nya belum ada edge.")
+        if g is not None:
+            horizon_pilih = st.radio("Horizon", ["T1", "T3", "T5"],
+                                     index=1, horizontal=True, key="hz_pilih")
+            st.dataframe(g[g["horizon"] == horizon_pilih],
+                        use_container_width=True, hide_index=True)
+            with st.expander("Lihat semua horizon sekaligus"):
+                st.dataframe(g, use_container_width=True, hide_index=True)
+        else:
+            st.info("Belum ada sinyal yang cukup umur buat T+1 (butuh "
+                    "minimal 1 hari bursa lewat).")
         st.markdown("#### 📜 Detail per sinyal")
-        st.dataframe(ev.sort_values("return_%", ascending=False),
+        sort_col = "t3_ret" if "t3_ret" in ev.columns else ev.columns[-1]
+        st.dataframe(ev.sort_values(sort_col, ascending=False, na_position="last"),
                      use_container_width=True, height=400, hide_index=True)
     else:
         st.info("Evaluasi muncul setelah ada sinyal berumur ≥ 1 hari "
