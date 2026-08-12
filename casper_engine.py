@@ -79,7 +79,7 @@ import numpy as np
 import pandas as pd
 import pytz
 
-VERSI = "4.0"
+VERSI = "4.2.2"
 TZ_WIB = pytz.timezone("Asia/Jakarta")
 
 
@@ -126,6 +126,13 @@ COOLDOWN_JAM = 20          # jangan kirim ulang ticker+event dalam 20 jam
 # form = formation window (T), skip = skip period (S) -> buku 3.1
 # ma   = (cepat, lambat) buat cross; ma3 = tiga MA (3.13)
 MODES = {
+    # BSJP = Beli Sore Jual Pagi. Horizon-nya SEMALAM, bukan berhari-hari,
+    # jadi faktornya beda sendiri: kekuatan penutupan, rekam jejak gap
+    # overnight, dan akumulasi bandar di hari itu. `overnight=True`
+    # nyalain faktor khusus BSJP di skor_lintas_saham.
+    "BSJP":     dict(emoji="🌆", rsi=(45, 78), atr=(1.0, 7.0),
+                     form=5,   skip=0,  ma=(5, 20),   ma3=(3, 10, 21),
+                     donchian=10, ret_t=0.03, overnight=True),
     "Scalping": dict(emoji="⚡",  rsi=(45, 75), atr=(1.0, 6.0),
                      form=10,  skip=0,  ma=(5, 20),   ma3=(3, 10, 21),
                      donchian=10, ret_t=0.05),
@@ -155,6 +162,19 @@ FAKTOR = {
     "f_meanrev": 0.5,   # 3.9  mean-reversion lintas cluster
     "f_trend":   0.8,   # 3.11-3.13 struktur MA
     "f_vol":     0.6,   # konfirmasi volume (poster: breakout butuh volume)
+    "f_bandar":  1.0,   # bandarmologi (Arjum) / proksi CMF+A/D
+}
+
+# Bobot khusus BSJP: horizonnya cuma semalam, jadi momentum 3 bulan dan
+# low-vol nyaris nggak relevan — yang nentuin itu kekuatan penutupan,
+# rekam jejak gap overnight, dan siapa yang nyerap di sesi terakhir.
+FAKTOR_BSJP = {
+    "f_close_str": 1.2,   # posisi close di dalam range harian
+    "f_overnight": 1.2,   # edge overnight historis, risk-adjusted
+    "f_bandar":    1.0,   # akumulasi bandar hari itu
+    "f_vol":       0.8,   # volume di atas normal
+    "f_trend":     0.5,   # jangan lawan arah, tapi bobotnya kecil
+    "f_meanrev":   0.3,   # jangan ngejar yang udah kejauhan hari ini
 }
 
 
@@ -214,6 +234,24 @@ def porsi_sesi(ts: pd.Timestamp | None = None) -> float:
     if lewat <= 0:
         return 0.0
     return min(lewat / total, 1.0)
+
+
+def _secrets_tersedia() -> bool:
+    """True cuma kalau file secrets.toml BENERAN ada.
+
+    Kenapa perlu dicek duluan: di Streamlit versi lama, sekadar NYENTUH
+    `st.secrets` waktu file-nya nggak ada bakal NGERENDER KOTAK MERAH di
+    UI — sebelum exception-nya dilempar. Jadi bungkus try/except doang
+    nggak nolong, kotaknya udah terlanjur nongol. Di laptop yang cuma
+    pakai config_tele.json (tanpa secrets.toml), UI-nya jadi penuh
+    "No secrets found" padahal semuanya normal.
+
+    Path-nya persis yang disebut Streamlit di pesan error itu.
+    """
+    return any(os.path.exists(p) for p in (
+        os.path.join(".streamlit", "secrets.toml"),
+        os.path.expanduser("~/.streamlit/secrets.toml"),
+        "/mount/src/.streamlit/secrets.toml"))
 
 
 def normalisasi(tickers):
@@ -629,6 +667,26 @@ def fitur_ticker(o, h, l, c, v, mode="Swing",
     r_pendek = float(np.log(c.iloc[-1] / c.iloc[-6]))  # 5 hari, buat 3.9
     f_vol = math.log(max(rvol_full, 0.05))           # konfirmasi volume
 
+    # ---- BSJP: kekuatan penutupan + rekam jejak gap overnight -----------
+    # close_str = posisi close di dalam range harian. 1.0 = nutup persis di
+    # high (ada yang nyerap sampai bel), 0.0 = nutup di low (dilepas).
+    rng_hari = float(h.iloc[-1] - l.iloc[-1])
+    close_str = (float(c.iloc[-1] - l.iloc[-1]) / rng_hari
+                 if rng_hari > 0 else 0.5)
+    close_str_5 = float((((c - l) / (h - l).replace(0, np.nan))
+                         .iloc[-5:]).mean())
+    # overnight = open BESOK / close HARI INI - 1. Inilah return yang
+    # bener-bener dipanen BSJP; dihitung risk-adjusted (eq. 269) supaya
+    # saham yang gapnya gede tapi acak nggak menang lawan yang konsisten.
+    ov = (o.shift(-1) / c - 1).dropna()
+    ov_win = ov.iloc[-120:]
+    ov_mean = float(ov_win.mean()) if len(ov_win) >= 30 else 0.0
+    ov_std = float(ov_win.std()) if len(ov_win) >= 30 else 0.0
+    f_overnight = ov_mean / ov_std if ov_std > 0 else 0.0
+    ov_menang = (float((ov_win > 0).mean() * 100)
+                 if len(ov_win) >= 30 else np.nan)
+    ov_rata = ov_mean * 100
+
     # ---- pola candle & fase ---------------------------------------------
     pola = deteksi_candle(o, h, l, c)
     fase = fase_wyckoff(c, v)
@@ -653,9 +711,18 @@ def fitur_ticker(o, h, l, c, v, mode="Swing",
         "bar_since_pivot": int(bar_since_pivot), "exit_2pct": exit_2pct,
         "ret_form": ret_form,
         "pola": pola, "fase": fase,
+        "close_str": round(close_str, 3),
+        "low_hari": float(l.iloc[-1]),
+        "ov_menang_pct": (round(ov_menang, 1) if np.isfinite(ov_menang)
+                          else np.nan),
+        "ov_rata_pct": round(ov_rata, 3),
         # bahan faktor mentah:
         "f_mom": f_mom, "f_lowvol": f_lowvol, "f_trend": f_trend,
         "f_vol": f_vol, "_r_pendek": r_pendek,
+        "f_close_str": 0.7 * close_str + 0.3 * (close_str_5
+                                                if np.isfinite(close_str_5)
+                                                else 0.5),
+        "f_overnight": f_overnight,
     }
 
 
@@ -692,6 +759,126 @@ def residual_momentum(close: pd.DataFrame, ihsg: pd.Series | None,
     mu = win.mean()
     sd = win.std().replace(0, np.nan)
     return (mu / sd).fillna(0.0)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  BANDARMOLOGI — data Arjum kalau ada, proksi OHLCV kalau nggak
+# ════════════════════════════════════════════════════════════════════════
+def hari_bursa_terakhir(sampai, n=5):
+    """n tanggal hari kerja terakhir sampai `sampai` (inklusif).
+    Libur bursa nggak dikecualiin — request buat tanggal libur bakal
+    balik kosong dan diabaikan, itu aman."""
+    ts = pd.Timestamp(sampai)
+    out = []
+    while len(out) < n:
+        if ts.weekday() < 5:
+            out.append(ts.strftime("%Y-%m-%d"))
+        ts -= pd.Timedelta(days=1)
+    return out
+
+
+def pasang_bandar(df, data, bandar=None, hari_bandar=5, tgl_bar=None,
+                  bandar_top=40, asing=True, bobot=None):
+    """Tempelin fitur bandarmologi + kolom `f_bandar` ke hasil scan.
+
+    SCAN DUA TAHAP — ini yang bikin dia nggak kena rate limit:
+      Tahap 1 (murah)  : SELURUH universe di-rank pakai OHLCV + proksi.
+      Tahap 2 (mahal)  : cuma `bandar_top` kandidat teratas yang ditembak
+                         ke Arjum, karena `code` itu path parameter —
+                         satu request = satu saham. Nembak 700 ticker tiap
+                         scan itu 700 request; buat 40 kandidat teratas
+                         cukup 40 (atau 80 kalau net asing ikut diambil).
+
+    Sisanya tetap kepakai lewat proksi, dan `bandar_sumber` per baris
+    ngasih tau yang mana dapat data broker beneran. Penting: dua sumber
+    ngisi kolom yang sama, tanpa penanda gampang salah sangka.
+    """
+    try:
+        import casper_arjum as ar
+    except Exception:                                   # noqa: BLE001
+        ar = None
+
+    fb = bandar
+    if fb is None and ar is not None and ar.tersedia():
+        try:
+            tgl = hari_bursa_terakhir(tgl_bar or now_wib().date(),
+                                      hari_bandar)
+            mulai, akhir = tgl[-1], tgl[0]
+            # ranking sementara buat milih siapa yang layak ditembak
+            # Ranking sementara HARUS pakai bobot mode yang lagi jalan.
+            # Sempat pakai FAKTOR terus walau modenya BSJP — akibatnya
+            # yang ditembak ke Arjum itu kandidat versi Swing, sementara
+            # yang nangkring di atas setelah f_bandar masuk malah saham
+            # lain. Ketahuan pas top-6 hasil akhir semuanya "proksi".
+            b0 = {k: v for k, v in (bobot or FAKTOR).items()
+                  if k != "f_bandar"}
+            sementara = gabung_alpha(df.copy(), b0)
+            pilih = sementara.nlargest(min(bandar_top, len(df)),
+                                       "alpha").index.tolist()
+            print(f"[i] Arjum: narik broker summary {len(pilih)} kandidat "
+                  f"teratas ({mulai} s/d {akhir})...")
+            bs = ar.ambil_banyak(pilih, start_date=mulai, end_date=akhir)
+            bs_f = None
+            if asing and not bs.empty:
+                print("[i] Arjum: narik net asing (flow=F)...")
+                bs_f = ar.ambil_banyak(pilih, start_date=mulai,
+                                       end_date=akhir, flow="F", diam=True)
+            fb = ar.fitur_bandar(bs, bs_f)
+            print(f"[i] Bandarmologi Arjum: {len(fb)} ticker kebaca.")
+        except Exception as e:                          # noqa: BLE001
+            print(f"[!] Arjum gagal ({e}) — turun ke proksi OHLCV.")
+            fb = None
+    # Proksi OHLCV dihitung buat SEMUA ticker, terus dipakai NAMBAL yang
+    # nggak kecakup Arjum. Arjum sering cuma nyediain sebagian universe
+    # (saham tipis kadang nggak ada broker summary-nya). Tanpa tambalan,
+    # ticker yang nggak kecakup dapat f_bandar netral 0.5 dan otomatis
+    # kalah dari yang kecakup — bias yang nggak ada hubungannya sama
+    # kualitas sahamnya, cuma soal kelengkapan data.
+    proksi = None
+    if ar is not None:
+        try:
+            proksi = ar.proxy_dari_ohlcv(data["High"], data["Low"],
+                                         data["Close"], data["Volume"])
+        except Exception as e:                          # noqa: BLE001
+            print(f"[!] Proksi bandar gagal ({e}).")
+    if fb is None or getattr(fb, "empty", True):
+        fb = proksi
+    elif proksi is not None:
+        kurang = [i for i in proksi.index if i not in fb.index]
+        if kurang:
+            print(f"[i] {len(kurang)} ticker nggak kecakup Arjum "
+                  "— ditambal proksi OHLCV.")
+            fb = pd.concat([fb, proksi.loc[kurang]], axis=0)
+
+    kolom = ["akum_jt", "konsentrasi_top5", "dominasi_1", "tiket_beli_jt",
+             "foreign_net_jt", "broker_top", "cmf", "bandar_sumber"]
+    if fb is None or fb.empty:
+        for k in kolom:
+            df[k] = np.nan
+        df["bandar_sumber"] = "tidak ada ❌"
+        df["f_bandar"] = 0.5
+        return df
+
+    fb = fb.copy()
+    fb.index = [str(i).replace(".JK", "") for i in fb.index]
+    for k in kolom:
+        df[k] = fb[k].reindex(df.index) if k in fb.columns else np.nan
+    df["bandar_sumber"] = df["bandar_sumber"].fillna("tidak ada ❌")
+    # Skor dihitung TERPISAH per sumber, baru digabung. Kalau di-rank
+    # barengan, angka net-value rupiah (miliaran) dan CMF (-1..1) masuk
+    # satu ranking — nggak ada artinya. Di dalam tiap sumber, ranking-nya
+    # baru sebanding.
+    try:
+        skor = pd.Series(0.5, index=df.index, dtype=float)
+        for sumber in fb["bandar_sumber"].dropna().unique():
+            sub = fb[fb["bandar_sumber"] == sumber]
+            s = ar.skor_bandar(sub).reindex(df.index)
+            skor = skor.mask(s.notna(), s)
+        df["f_bandar"] = skor.fillna(0.5)
+    except Exception as e:                              # noqa: BLE001
+        print(f"[!] skor bandar gagal ({e}) — dianggap netral.")
+        df["f_bandar"] = 0.5
+    return df
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -740,6 +927,34 @@ def level_tp_sl(r) -> dict:
     harga, atr = float(r["price"]), float(r["atr"])
     dc_hi, dc_lo = r.get("dc_hi"), r.get("dc_lo")
     res, sup = r.get("pivot_r"), r.get("pivot_s")
+
+    # ── BSJP: horizonnya SEMALAM, jadi levelnya beda sendiri.
+    #    Donchian 40 bar dan measured-move itu target berminggu-minggu —
+    #    nggak ada artinya buat posisi yang dijual besok jam 9. Stop-nya
+    #    di bawah low hari ini (kalau besok buka di bawah situ, premis
+    #    "ada yang nyerap" langsung batal), target di pivot R besok.
+    if r.get("_overnight"):
+        low_ini = float(r.get("low_hari", harga - atr))
+        sl = snap(min(low_ini - 0.15 * atr, harga - 0.4 * atr), "down")
+        risiko = harga - sl
+        if risiko <= 0:
+            return {"tp": np.nan, "sl": sl, "rr": np.nan,
+                    "tp_dari": "-", "sl_dari": "Low hari ini",
+                    "risiko_pct": np.nan}
+        # Pivot R dipakai HANYA kalau jaraknya udah >= 1.5R; kalau lebih
+        # mepet dari itu, targetnya nggak sepadan sama risikonya dan kita
+        # pakai 2R murni. (Sempat kejadian: target 1.5R di-snap ke bawah
+        # jadi 1.47R, terus kesaring sendiri sama gerbang R:R >= 1.5.
+        # Ketahuan dari funnel — 9 dari 250 doang yang lolos.)
+        tp, tipe = snap(harga + 2 * risiko, "up"), "2R overnight"
+        if res is not None and np.isfinite(res) and res >= harga + 1.5 * risiko:
+            kandidat_res = snap(res, "down")
+            if kandidat_res < tp:
+                tp, tipe = kandidat_res, "Pivot R (overnight)"
+        return {"tp": tp, "sl": sl,
+                "rr": round((tp - harga) / risiko, 2),
+                "tp_dari": tipe, "sl_dari": "Low hari ini",
+                "risiko_pct": round(risiko / harga * 100, 2)}
 
     # ── 1. STOP dulu, baru target. Urutannya penting: risiko itu yang
     #      ditentukan pasar (struktur), target itu konsekuensinya.
@@ -802,23 +1017,36 @@ def klasifikasi(df: pd.DataFrame, mode: str, fresh_max=FRESH_MAX_BAR,
         cross & candle itu lemah kalau berdiri sendiri.
         """
         kandidat = []   # (nama, umur_bar, kuat?)
+        # Di mode BSJP, event multi-hari (breakout 40 bar, golden cross)
+        # TETAP dicatat tapi nggak pernah "kuat" — posisinya dijual besok
+        # pagi, jadi setup yang butuh berminggu-minggu buat matang itu
+        # nggak relevan. Yang nentuin cuma apa yang terjadi HARI INI.
+        ov = bool(prof.get("overnight"))
         if r["bar_since_break"] <= fresh_max:
             if r["break_valid"]:
-                kandidat.append(("BREAKOUT 🚀", r["bar_since_break"], True))
+                kandidat.append(("BREAKOUT 🚀", r["bar_since_break"], not ov))
             else:
                 kandidat.append(("Breakout tanpa volume ⚠️",
                                  r["bar_since_break"], False))
         if r["bar_since_cross"] <= fresh_max:
             kandidat.append(("GOLDEN CROSS ✨", r["bar_since_cross"],
-                             bool(r["tiga_ma"])))
+                             bool(r["tiga_ma"]) and not ov))
         if r["bar_since_pivot"] <= fresh_max and r["trend_up"]:
             kandidat.append(("RECLAIM PIVOT 🎯", r["bar_since_pivot"],
-                             bool(r["rvol"] >= 1.2)))
+                             bool(r["rvol"] >= 1.2) and not ov))
+        if prof.get("overnight"):
+            # Event khas BSJP: close nutup di 1/3 ATAS range harian sambil
+            # volume di atas normal — jejak ada yang nyerap sampai bel
+            # penutupan. Umurnya selalu 0: sinyal ini basi besok pagi.
+            if r["close_str"] >= 0.67 and r["rvol"] >= 1.2:
+                kandidat.append(("TUTUP KUAT 🌆", 0,
+                                 bool(r["rvol"] >= 1.5
+                                      and r["above_vwap"])))
         if r["pola"] and any(k in r["pola"] for k in BULLISH_CANDLE):
             # candle cuma "kuat" kalau ada konteks: trend naik + volume
             kuat = bool(r["trend_up"] and r["rvol"] >= 1.2
                         and r["di_atas_pivot"])
-            kandidat.append((r["pola"], 0, kuat))
+            kandidat.append((r["pola"], 0, kuat and not ov))
         if not kandidat:
             return pd.Series({"event": "-", "bar_since": 999,
                               "event_kuat": False, "fresh": False})
@@ -875,9 +1103,13 @@ def klasifikasi(df: pd.DataFrame, mode: str, fresh_max=FRESH_MAX_BAR,
         # mentah-mentah, syarat ini ngebunuh 100% breakout (kelihatan jelas
         # di funnel: 7 breakout -> 0 lolos). Jadi aturan pivot cuma dipakai
         # buat sinyal NON-breakout.
+        # ...dan nggak berlaku juga buat BSJP: nutup KUAT di atas
+        # resistance sambil volume gede itu justru PREMIS strateginya,
+        # bukan alasan buat mundur.
         "belum kena resistance": (~df["kena_resist"]
                                   | df["event"].str.contains("BREAKOUT",
-                                                             na=False)),
+                                                             na=False)
+                                  | bool(prof.get("overnight"))),
         # poster: "ikuti smart money, hindari melawan arus". Beli di fase
         # Mark-Down = ngelawan distribusi yang lagi jalan; cuma dibolehin
         # kalau breakout-nya beneran dibarengi ledakan volume (rvol >= 2).
@@ -968,6 +1200,48 @@ def ukuran_kelly(df, cap=0.10, min_sampel=30):
     if peta:
         df["kelly_%"] = df["signal"].map(peta).fillna("-")
     return df
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  PROYEKSI BAGGER — block bootstrap, bukan ramalan
+# ════════════════════════════════════════════════════════════════════════
+def proyeksi_bagger(ret_harian: pd.Series, horizon=252, n_sim=1500,
+                    blok=20, seed=7):
+    """Sebaran return `horizon` hari ke depan lewat BLOCK BOOTSTRAP.
+
+    Kenapa block, bukan bootstrap biasa: return saham itu punya volatility
+    clustering (hari ribut ngumpul sama hari ribut) — itu udah diakui di
+    kolom vol_regime. Ngacak return satu-satu MERUSAK struktur itu dan
+    bikin sebarannya kelihatan jauh lebih adem dari kenyataan. Diambil
+    per blok 20 hari supaya pola gerombolannya ikut kebawa.
+
+    Kenapa bukan rumus lognormal: return IDX ekor gemuk. Asumsi normal
+    bakal ngecilin peluang kejadian ekstrem — dua-duanya, yang bikin
+    kaya dan yang bikin nyangkut.
+
+    INI BUKAN RAMALAN. Ini bilang: "kalau perilaku harga ke depan mirip
+    sama 2 tahun terakhir, sebarannya kayak gini." Kalau fundamental atau
+    likuiditasnya berubah, angka ini nggak berlaku.
+
+    Return: dict p25 / p50 / p75 (persen) + peluang 2x dan peluang -50%.
+    """
+    r = pd.to_numeric(ret_harian, errors="coerce").dropna().to_numpy()
+    if len(r) < max(120, blok * 3):
+        return {"proj_p25": np.nan, "proj_p50": np.nan, "proj_p75": np.nan,
+                "p_2x": np.nan, "p_setengah": np.nan}
+    rng = np.random.default_rng(seed)
+    n_blok = int(np.ceil(horizon / blok))
+    mulai = rng.integers(0, len(r) - blok, size=(n_sim, n_blok))
+    idx = mulai[:, :, None] + np.arange(blok)[None, None, :]
+    total = r[idx].reshape(n_sim, -1)[:, :horizon].sum(axis=1)
+    kali = np.exp(total)                       # return log -> kelipatan
+    return {
+        "proj_p25": round(float(np.percentile(kali, 25) - 1) * 100, 1),
+        "proj_p50": round(float(np.percentile(kali, 50) - 1) * 100, 1),
+        "proj_p75": round(float(np.percentile(kali, 75) - 1) * 100, 1),
+        "p_2x": round(float((kali >= 2).mean()) * 100, 1),
+        "p_setengah": round(float((kali <= 0.5).mean()) * 100, 1),
+    }
 
 
 def max_order(turnover_jt, sigma_d, target_impact=0.005, cap_adv=0.05):
@@ -1061,14 +1335,24 @@ KOLOM_HASIL = [
     "exit_2pct", "pivot_c", "pivot_r", "pivot_s", "dc_hi", "dc_lo",
     "atr_pct", "rvol", "rsi_ema", "turnover_jt", "vol_regime", "var5_pct",
     "max_order_jt", "above_vwap", "pola", "fase",
-    "f_mom", "f_resmom", "f_lowvol", "f_meanrev",
+    # BSJP
+    "close_str", "ov_menang_pct", "ov_rata_pct",
+    # bandarmologi
+    "bandar_sumber", "akum_jt", "konsentrasi_top5", "dominasi_1",
+    "tiket_beli_jt", "foreign_net_jt", "broker_top", "cmf",
+    # proyeksi Bagger
+    "proj_p25", "proj_p50", "proj_p75", "p_2x", "p_setengah",
+    "f_mom", "f_resmom", "f_lowvol", "f_meanrev", "f_bandar",
+    "f_close_str", "f_overnight",
     "gagal_syarat", "kurang", "kelly_%",
 ]
 
 
 def scan(tickers=None, demo=False, semua=False, mode="Swing",
          min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA,
-         fresh_max=FRESH_MAX_BAR, min_iq=70.0, max_risiko=8.0, min_rr=1.5):
+         fresh_max=FRESH_MAX_BAR, min_iq=70.0, max_risiko=8.0, min_rr=1.5,
+         bandar=None, hari_bandar=5, proyeksi_top=40,
+         bandar_top=40, bandar_asing=True):
     global LAST_CLOSE, LAST_META
     if tickers is None:
         tickers = muat_ticker_semua() if semua else DEFAULT_TICKERS
@@ -1137,9 +1421,17 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
     # pasar = "murah" -> faktor dibalik tandanya.
     df["f_meanrev"] = -(df["_r_pendek"] - df["_r_pendek"].mean())
 
-    df = gabung_alpha(df)
+    # ---- BANDARMOLOGI ---------------------------------------------------
+    # BSJP punya bobot faktor sendiri (horizon semalam, bukan berminggu)
+    bobot = FAKTOR_BSJP if prof.get("overnight") else FAKTOR
+    df = pasang_bandar(df, data, bandar=bandar, hari_bandar=hari_bandar,
+                       tgl_bar=tgl_bar, bandar_top=bandar_top,
+                       asing=bandar_asing, bobot=bobot)
+    df = gabung_alpha(df, bobot)
+    LAST_META["bobot"] = bobot
 
     # ---- TP/SL & risiko -------------------------------------------------
+    df["_overnight"] = bool(prof.get("overnight"))
     lvl = df.apply(level_tp_sl, axis=1, result_type="expand")
     df = pd.concat([df, lvl], axis=1)
     df["max_order_jt"] = [max_order(t, s) for t, s
@@ -1165,6 +1457,22 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
     df["turnover_jt"] = df["turnover_jt"].round(0)
     df["rsi_ema"] = df["rsi_ema"].round(1)
 
+    # ---- proyeksi Bagger (mahal: cuma top-N alpha) ----------------------
+    for k in ("proj_p25", "proj_p50", "proj_p75", "p_2x", "p_setengah"):
+        df[k] = np.nan
+    if mode == "Bagger" and proyeksi_top > 0:
+        kandidat = df.nlargest(min(proyeksi_top, len(df)), "iq_score")
+        print(f"[i] Proyeksi 12 bulan buat {len(kandidat)} kandidat teratas"
+              " (block bootstrap)...")
+        for tkr in kandidat.index:
+            kol = next((c for c in close.columns
+                        if str(c).replace(".JK", "") == tkr), None)
+            if kol is None:
+                continue
+            s = np.log(close[kol] / close[kol].shift()).dropna()
+            for k, v in proyeksi_bagger(s).items():
+                df.loc[tkr, k] = v
+
     df = ukuran_kelly(df)
     df = df.sort_values(["fresh", "iq_score", "mesin_score"],
                         ascending=[False, False, False]).reset_index(drop=True)
@@ -1177,6 +1485,8 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
 def _kredensial_gsheet():
     if os.path.exists("gsheet_creds.json"):
         return json.load(open("gsheet_creds.json"))
+    if not _secrets_tersedia():
+        return None
     try:
         import streamlit as st
         if "gcp_service_account" in st.secrets:
@@ -1473,6 +1783,8 @@ def ambil_config_tele(conf=CONF_TELE):
     tok, cid = os.environ.get("TELE_TOKEN"), os.environ.get("TELE_CHAT_ID")
     if tok and cid:
         return {"token": tok, "chat_id": cid}
+    if not _secrets_tersedia():
+        return None
     try:
         import streamlit as st
         if "token" in st.secrets and "chat_id" in st.secrets:
@@ -1641,6 +1953,131 @@ def kirim_tele(df, top=8, conf=CONF_TELE, paksa=False, diam_kalau_kosong=True):
 # ════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ════════════════════════════════════════════════════════════════════════
+def jalankan_eod(semua=True, tickers=None, demo=False, top=6,
+                 mode_list=("BSJP", "Swing", "Bagger"), tele=True,
+                 min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA):
+    """SCAN EOD — satu jalur buat aksi besok pagi.
+
+    Tiga horizon sekaligus, karena keputusannya emang beda-beda:
+      BSJP   -> dibeli SORE INI, dijual besok pagi
+      Swing  -> dibeli besok, ditahan berhari-hari sampai berminggu
+      Bagger -> kandidat tahunan + proyeksi sebaran 12 bulan
+
+    Jalan sekali di akhir hari, bukan tiap 15 menit — bar-nya udah tutup,
+    jadi semua angka final. Ini justru kondisi paling bersih buat scan:
+    nggak ada lagi candle setengah jadi dan rvol yang belum lengkap.
+    """
+    hasil, ringkas = {}, []
+    for mode in mode_list:
+        print(f"\n=== EOD: {mode} ===")
+        try:
+            df = scan(tickers=tickers, demo=demo, semua=semua, mode=mode,
+                      min_turnover_jt=min_turnover_jt, min_harga=min_harga)
+        except DataKosong as e:
+            print(f"[X] {e}")
+            continue
+        if df.empty:
+            continue
+        hasil[mode] = df
+        catat_jurnal(df)
+        buy = df[df["iq_verdict"] == "BUY"].head(top)
+        ringkas.append((mode, df, buy))
+        print(f"[i] {len(df)} discan · {len(buy)} BUY · "
+              f"bandar: {df['bandar_sumber'].iloc[0]}")
+
+    if tele and ringkas:
+        kirim_tele_eod(ringkas, top=top)
+    return hasil
+
+
+def kirim_tele_eod(ringkas, top=6, conf=CONF_TELE):
+    """Satu pesan EOD berisi rencana besok, dipisah per horizon."""
+    global LAST_TELE
+    cfg = ambil_config_tele(conf)
+    if cfg is None:
+        LAST_TELE = {"status": "kredensial", "n": 0}
+        print("[!] Kredensial Telegram nggak ketemu.")
+        return False
+    now = now_wib()
+    meta = LAST_META or {}
+    baris = ["👻 CASPER — RENCANA BESOK (EOD)",
+             f"📅 bar data {meta.get('data_date','?')} "
+             f"({meta.get('bar','?')})",
+             f"⏰ disusun {now:%H:%M} WIB · {now:%d %b %Y}",
+             "━━━━━━━━━━━━━━━━━━━━"]
+    total = 0
+    for mode, df, buy in ringkas:
+        emo = MODES.get(mode, {}).get("emoji", "")
+        sumber = df["bandar_sumber"].iloc[0] if len(df) else "-"
+        judul = {"BSJP": "BELI SORE INI, JUAL BESOK PAGI",
+                 "Swing": "BUAT DIBELI BESOK (tahan harian-mingguan)",
+                 "Bagger": "KANDIDAT JANGKA PANJANG"}.get(mode, mode)
+        baris += ["", f"{emo} {mode} — {judul}",
+                  f"   bandar: {sumber} · {len(df)} discan"]
+        if buy.empty:
+            gerbang = meta.get("funnel", {})
+            biang = ""
+            if gerbang:
+                sisa = list(gerbang.items())
+                pangkas = [(k, (sisa[i-1][1]["lolos_kumulatif"]
+                                if i else v["lolos_kumulatif"])
+                            - v["lolos_kumulatif"])
+                           for i, (k, v) in enumerate(sisa)]
+                biang = max(pangkas, key=lambda x: x[1])[0]
+            baris.append("   — nggak ada yang lolos"
+                         + (f" (paling banyak kesaring di: {biang})"
+                            if biang else ""))
+            continue
+        for _, r in buy.iterrows():
+            total += 1
+            baris.append(
+                f"   • {r['ticker']} {r['price']:,.0f} — {r['event']}\n"
+                f"     TP {r['tp']:,.0f} / SL {r['sl']:,.0f} · R:R {r['rr']} "
+                f"· risiko {r['risiko_pct']}%\n"
+                f"     alpha {r['iq_score']:.0f} · RVOL {r['rvol']}x · "
+                f"{r['fase']}")
+            if mode == "BSJP" and np.isfinite(r.get("ov_menang_pct", np.nan)):
+                baris.append(
+                    f"     overnight 120h: menang {r['ov_menang_pct']:.0f}% "
+                    f"· rata {r['ov_rata_pct']:+.2f}%")
+            if mode == "Bagger" and np.isfinite(r.get("proj_p50", np.nan)):
+                baris.append(
+                    f"     proyeksi 12bln: {r['proj_p25']:+.0f}% / "
+                    f"{r['proj_p50']:+.0f}% / {r['proj_p75']:+.0f}% "
+                    f"(p25/med/p75) · peluang 2x {r['p_2x']:.0f}%")
+            if np.isfinite(pd.to_numeric(r.get("akum_jt"),
+                                         errors="coerce")):
+                baris.append(
+                    f"     🕵️ akumulasi {r['akum_jt']:,.0f}jt · "
+                    f"konsentrasi top5 {r['konsentrasi_top5']:.0%} · "
+                    f"tiket {r['tiket_beli_jt']:.1f}jt/trx · "
+                    f"top: {r['broker_top']}")
+                if np.isfinite(pd.to_numeric(r.get("foreign_net_jt"),
+                                             errors="coerce")):
+                    baris.append(
+                        f"     🌏 net asing {r['foreign_net_jt']:+,.0f}jt")
+    baris += ["", "━━━━━━━━━━━━━━━━━━━━",
+              "👻 sistem & disiplin — bukan rekomendasi beli/jual",
+              "angka proyeksi = sebaran dari perilaku harga masa lalu, "
+              "bukan ramalan"]
+
+    import urllib.request
+    url = f"https://api.telegram.org/bot{cfg['token']}/sendMessage"
+    payload = json.dumps({"chat_id": cfg["chat_id"],
+                          "text": "\n".join(baris)}).encode()
+    req = urllib.request.Request(
+        url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=30)
+        LAST_TELE = {"status": "terkirim", "n": total}
+        print(f"[i] Ringkasan EOD terkirim ({total} sinyal).")
+        return True
+    except Exception as e:                              # noqa: BLE001
+        LAST_TELE = {"status": f"error: {e}", "n": 0}
+        print(f"[!] Gagal kirim EOD: {e}")
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
@@ -1650,14 +2087,29 @@ def main():
     ap.add_argument("--paksa-tele", action="store_true",
                     help="kirim top-N walau bukan sinyal baru")
     ap.add_argument("--top", type=int, default=8)
-    ap.add_argument("--mode", default="Swing", choices=list(MODES))
+    ap.add_argument("--mode", default="Swing", choices=list(MODES),
+                    help="BSJP = Beli Sore Jual Pagi (horizon semalam)")
     ap.add_argument("--auto-mode", action="store_true")
     ap.add_argument("--min-turnover", type=int, default=MIN_TURNOVER_JT)
     ap.add_argument("--min-harga", type=int, default=MIN_HARGA)
     ap.add_argument("--fresh", type=int, default=FRESH_MAX_BAR)
+    ap.add_argument("--eod", action="store_true",
+                    help="scan EOD 3 horizon (BSJP/Swing/Bagger) + kirim "
+                         "rencana besok ke Telegram")
+    ap.add_argument("--eod-mode", nargs="+",
+                    default=["BSJP", "Swing", "Bagger"],
+                    help="mode apa aja yang discan di --eod")
     args = ap.parse_args()
 
     print(f"=== CASPER ENGINE v{VERSI} ===")
+
+    if args.eod:
+        jalankan_eod(semua=args.all or args.tickers is None,
+                     tickers=args.tickers, demo=args.demo, top=args.top,
+                     mode_list=tuple(args.eod_mode), tele=args.tele,
+                     min_turnover_jt=args.min_turnover,
+                     min_harga=args.min_harga)
+        return
     mode = args.mode
     if args.auto_mode:
         mode, *_rest, label = get_market_regime()

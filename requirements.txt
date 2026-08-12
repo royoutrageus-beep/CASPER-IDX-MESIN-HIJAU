@@ -1,8 +1,14 @@
+# Casper punya shim `lebar()` di casper_app.py yang milih otomatis antara
+# `use_container_width` (Streamlit lama) dan `width="stretch"` (Streamlit
+# baru), jadi kode yang sama jalan di laptop maupun Streamlit Cloud tanpa
+# maksa lo update. Floor-nya sengaja dibiarkan rendah.
 streamlit>=1.37
 yfinance>=0.2.40
 pandas>=2.0
 numpy>=1.24
 openpyxl>=3.1
 pytz>=2024.1
+# jurnal + memori anti-spam Telegram di Google Sheets. Opsional, tapi sangat
+# disarankan buat Streamlit Cloud & GitHub Actions — disk di sana ephemeral.
 gspread>=6.0
 google-auth>=2.0

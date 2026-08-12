@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.0
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.2.2
 ============================================================================
 Jalankan:  streamlit run casper_app.py
 Butuh:     pip install streamlit yfinance pandas numpy pytz
-File lain: casper_engine.py (v4.0) di folder yang sama
+File lain: casper_engine.py + casper_arjum.py (versi sama) di folder yang sama
 
 BEDA DARI v2:
   * Panel FUNNEL — kalau nol sinyal BUY, keliatan GERBANG MANA yang nutup.
@@ -36,28 +36,103 @@ st.set_page_config(page_title="Casper IDX — Mesin Hijau", page_icon="👻",
 # traceback yang nggak nyeritain apa-apa. Sekarang dicek eksplisit.
 _WAJIB = ["VERSI", "DataKosong", "LAST_TELE", "FAKTOR", "COOLDOWN_JAM",
           "MIN_HARGA", "FRESH_MAX_BAR", "bar_sejak_nyala", "tick_size",
-          "pilih_untuk_kirim", "porsi_sesi"]
+          "pilih_untuk_kirim", "porsi_sesi",
+          # v4.1+
+          "FAKTOR_BSJP", "pasang_bandar", "proyeksi_bagger",
+          "jalankan_eod", "kirim_tele_eod"]
 _hilang = [a for a in _WAJIB if not hasattr(ce, a)]
 if _hilang:
     st.error(
         "### ⚠️ Versi engine nggak cocok\n\n"
-        f"`casper_app.py` ini versi **4.0**, tapi `casper_engine.py` yang "
+        f"`casper_app.py` ini versi **4.2.2**, tapi `casper_engine.py` yang "
         f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
         f"kurang: `{'`, `'.join(_hilang[:5])}`"
         + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
-        + "\n\n**Penyebab paling umum:** cuma satu file yang ke-push ke "
-        "repo. Dua-duanya harus versi 4.0 dan ada di folder yang sama.\n\n"
+        + "\n\n**Penyebab paling umum:** nggak semua file ke-push ke repo. "
+        "`casper_engine.py`, `casper_app.py`, dan `casper_arjum.py` harus "
+        "sama-sama versi terbaru dan ada di folder yang sama.\n\n"
         "Cek dari mesin lo:\n"
         "```bash\n"
-        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.0\"\n"
-        "git add casper_engine.py casper_app.py\n"
-        "git commit -m 'Casper v4.0'\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.2.2\"\n"
+        "git add casper_engine.py casper_app.py casper_arjum.py\n"
+        "git commit -m 'Casper v4.2.2'\n"
         "git push\n"
         "```\n"
         "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "
         "gerak: menu ⋮ di pojok kanan atas → **Reboot app**.")
     st.caption(f"engine ter-load dari: `{getattr(ce, '__file__', '?')}`")
     st.stop()
+
+# ══════════════════════════════════════════════════════════════════════
+#  SHIM LEBAR — `use_container_width` vs `width`
+# ══════════════════════════════════════════════════════════════════════
+# Streamlit lagi mindahin `use_container_width=True` ke `width="stretch"`,
+# TAPI nggak serentak: `st.dataframe` udah dapat `width` jauh lebih dulu
+# daripada `st.button`. Jadi versi mana pun yang dipilih bakal salah di
+# salah satu tempat:
+#
+#   - pakai use_container_width  -> Streamlit Cloud (versi baru) ngewarning
+#     terus, dan tanggal hapusnya (2025-12-31) udah lewat
+#   - pakai width                -> Python 3.12 + Streamlit lama di mesin
+#     lokal langsung mati: "button() got an unexpected keyword argument
+#     'width'"
+#
+# Naikin requirements bukan jawaban: kode yang sama harus jalan di Cloud
+# DAN di laptop, dan lo nggak selalu mau update Streamlit cuma buat ini.
+# Jadi dideteksi PER FUNGSI, sekali, terus di-cache.
+import inspect                                          # noqa: E402
+from functools import lru_cache                         # noqa: E402
+
+
+@lru_cache(maxsize=None)
+def _punya_width(nama_fn: str) -> bool:
+    """True kalau `width` di fungsi ini nerima "stretch".
+
+    JEBAKAN: adanya parameter `width` NGGAK cukup jadi patokan. Di
+    Streamlit 1.40, `st.dataframe` udah punya `width` — tapi tipenya
+    `int | None` (lebar dalam PIXEL). Ngoper "stretch" ke situ salah
+    tipe, dan bisa gagal diam-diam. Baru di versi yang lebih baru
+    tipenya berubah jadi Literal["stretch","content"] | int.
+    Jadi yang dicek nilai yang DITERIMA, bukan sekadar nama parameternya.
+    """
+    fn = getattr(st, nama_fn, None)
+    if fn is None:
+        return False
+    asli = getattr(fn, "__wrapped__", fn)
+    try:
+        p = inspect.signature(asli).parameters
+    except (TypeError, ValueError):
+        return False
+    if "width" not in p:
+        return False
+    tipe = f"{p['width'].annotation}".lower()
+    doc = (asli.__doc__ or "").lower()
+    terima_stretch = ("stretch" in tipe) or ("stretch" in doc)
+    if terima_stretch:
+        return True
+    # `width` ada tapi cuma nerima pixel -> pakai jalur lama selama masih
+    # tersedia. Kalau dua-duanya nggak cocok, mendingan nggak ngoper
+    # apa-apa daripada ngirim nilai yang salah tipe.
+    return "use_container_width" not in p
+
+
+def lebar(nama_fn: str, stretch: bool = True) -> dict:
+    """Kwarg lebar yang cocok buat versi Streamlit yang lagi jalan.
+
+    Balikin dict kosong kalau dua-duanya nggak ada — nggak ngoper apa-apa
+    itu selalu lebih baik daripada bikin app mati gara-gara kosmetik.
+    """
+    if _punya_width(nama_fn):
+        return {"width": "stretch" if stretch else "content"}
+    fn = getattr(st, nama_fn, None)
+    asli = getattr(fn, "__wrapped__", fn)
+    try:
+        if "use_container_width" in inspect.signature(asli).parameters:
+            return {"use_container_width": stretch}
+    except (TypeError, ValueError):
+        pass
+    return {}
+
 
 HIJAU = "#A3E635"
 CSS = """
@@ -151,9 +226,14 @@ with st.sidebar:
                     f'</div>', unsafe_allow_html=True)
     else:
         mode = st.selectbox(
-            "Mode sinyal (manual)",
-            ["Scalping", "Intraday", "Momentum", "Swing", "Bagger"],
-            index=3, format_func=lambda m: f"{m} {ce.MODES[m]['emoji']}")
+            "Mode sinyal (manual)", list(ce.MODES), index=4,
+            format_func=lambda m: f"{m} {ce.MODES[m]['emoji']}")
+        if ce.MODES[mode].get("overnight"):
+            st.caption("🌆 **BSJP** — beli sore ini, jual besok pagi. "
+                       "Faktornya beda sendiri (kekuatan penutupan + "
+                       "rekam jejak gap overnight + akumulasi bandar), "
+                       "SL di bawah low hari ini. Sinyalnya BASI besok "
+                       "pagi — jangan dipakai buat entry siang.")
 
     st.markdown("### 🔬 FILTER")
     min_to = st.number_input("Min turnover/hari — MEDIAN (juta Rp)",
@@ -173,7 +253,7 @@ with st.sidebar:
     max_risiko = st.slider("Risiko maksimal ke SL (%)", 1.0, 20.0, 8.0, 0.5)
     min_rr = st.slider("R:R minimal", 1.0, 4.0, 1.5, 0.1)
 
-    tombol_scan = st.button("🚀 SCAN MANUAL SEKARANG", use_container_width=True)
+    tombol_scan = st.button("🚀 SCAN MANUAL SEKARANG", **lebar("button"))
     st.divider()
 
     st.markdown("### 🔄 AUTO-SCAN")
@@ -187,13 +267,37 @@ with st.sidebar:
                f"{ce.COOLDOWN_JAM} jam.")
     st.divider()
 
+    st.markdown("### 🕵️ BANDARMOLOGI")
+    try:
+        import casper_arjum as ar
+        if ar.tersedia():
+            st.caption("✅ API key Arjum ketemu — broker summary asli")
+            hari_bandar = st.slider("Akumulasi berapa hari bursa", 1, 20, 5)
+            bandar_top = st.slider(
+                "Berapa kandidat teratas yang ditembak ke Arjum", 10, 150, 40,
+                step=10,
+                help="`code` di API Arjum itu path parameter — satu "
+                     "request = satu saham. Nembak ~700 ticker tiap scan "
+                     "bakal kena rate limit. Jadi seluruh universe di-rank "
+                     "dulu pakai OHLCV, baru sekian teratas yang ditarik "
+                     "data brokernya. Sisanya pakai proksi.")
+        else:
+            st.caption("⚠️ Key Arjum belum ada — pakai **proksi OHLCV** "
+                       "(CMF + A/D). Itu nebak tekanan beli dari harga & "
+                       "volume, BUKAN data broker.")
+            st.code("python casper_arjum.py --tulis-konfig", language="bash")
+            hari_bandar, bandar_top = 5, 40
+    except Exception:                                   # noqa: BLE001
+        st.caption("❌ casper_arjum.py nggak ketemu")
+        hari_bandar, bandar_top = 5, 40
+
     st.markdown("### 📨 TELEGRAM")
     ada = ce.ambil_config_tele() is not None
     st.caption("✅ kredensial ditemukan" if ada
                else "❌ isi config_tele.json / secrets dulu")
     st.caption("🗄️ Jurnal: " + ce.backend_label())
     tombol_tele = st.button("🔔 Kirim top-8 sekarang (paksa)",
-                            use_container_width=True,
+                            **lebar("button"),
                             disabled="hasil" not in st.session_state)
 
 # ══════════════════════════════ SCAN ════════════════════════════════════
@@ -221,7 +325,8 @@ if tombol_scan or auto_trigger:
            "semua": universe != "Custom",
            "mode": mode, "min_turnover_jt": min_to, "min_harga": min_harga,
            "fresh_max": fresh, "min_iq": float(min_iq),
-           "max_risiko": float(max_risiko), "min_rr": float(min_rr)}
+           "max_risiko": float(max_risiko), "min_rr": float(min_rr),
+           "hari_bandar": hari_bandar, "bandar_top": bandar_top}
     with st.spinner(f"👻 Casper lagi mindai pasar (mode {mode})..."):
         try:
             df, ev = jalankan_scan(cfg)
@@ -232,9 +337,15 @@ if tombol_scan or auto_trigger:
             st.error(f"💥 Scan gagal: {type(e).__name__}: {e}")
             df, ev = None, None
     if df is not None:
+        # JANGAN nulis key `auto_mode_on` ke session_state: key itu udah
+        # dipakai sama st.toggle di sidebar. Streamlit ngelarang nimpa
+        # session_state buat key yang udah ke-bind ke widget, dan dia
+        # ngelempar StreamlitAPIException yang pesan aslinya DISENSOR di
+        # Streamlit Cloud — jadi yang kelihatan cuma traceback tanpa sebab.
+        # Nilai toggle-nya tetap kebaca kok lewat st.session_state
+        # ["auto_mode_on"] di auto_scan(); nggak perlu disalin.
         st.session_state.update(hasil=df, eval=ev, cfg=cfg,
                                 meta=dict(ce.LAST_META),
-                                auto_mode_on=auto_mode_on,
                                 last_scan=ce.now_wib())
         st.success(f"✅ {len(df)} saham lolos filter kualitas (mode {mode}).")
         if auto_tele:
@@ -325,6 +436,21 @@ with tab1:
  <div class="stat"><div class="lbl">Median risiko</div><div class="val">{df['risiko_pct'].median():.1f}%</div></div>
 </div>""", unsafe_allow_html=True)
 
+        # Sumber bandarmologi ditempel besar-besar. Kolom net_bandar_jt /
+        # cmf keisi dua-duanya baik dari Arjum maupun proksi — tanpa
+        # penanda ini gampang banget salah sangka lagi lihat data broker
+        # asli padahal cuma tebakan dari harga & volume.
+        _src = str(df["bandar_sumber"].iloc[0]) if len(df) else "-"
+        if "Arjum" in _src:
+            st.success(f"🕵️ Bandarmologi: **{_src}** — broker summary asli.")
+        elif "proksi" in _src:
+            st.info("🕵️ Bandarmologi: **proksi OHLCV ⚠️** — kolom "
+                    "`cmf` dihitung dari posisi close di dalam range "
+                    "harian, **bukan** data broker. Isi API key Arjum "
+                    "buat dapat net-buy per broker beneran.")
+        else:
+            st.warning("🕵️ Bandarmologi: tidak ada.")
+
         if buy.empty:
             st.warning("⚠️ Nol sinyal BUY. Itu **bukan** error — buka tab "
                        "**🔬 Kenapa segini** buat lihat gerbang mana yang "
@@ -339,6 +465,26 @@ with tab1:
                          "c-hijau" if ("PRESISI" in g or "LAYAK" in g) else
                          "c-merah" if "WAIT" in g else "c-abu")
                 rr = f"{r['rr']:.2f}" if np.isfinite(r["rr"]) else "-"
+                # baris ekstra sesuai horizon modenya
+                ekstra = ""
+                if np.isfinite(pd.to_numeric(r.get("ov_menang_pct"),
+                                             errors="coerce")) \
+                        and ce.MODES.get(mode, {}).get("overnight"):
+                    ekstra = (f"<br>🌆 overnight 120h: menang "
+                              f"{r['ov_menang_pct']:.0f}% · rata "
+                              f"{r['ov_rata_pct']:+.2f}% · close-str "
+                              f"{r['close_str']:.2f}")
+                if np.isfinite(pd.to_numeric(r.get("proj_p50"),
+                                             errors="coerce")):
+                    ekstra += (f"<br>💎 12bln {r['proj_p25']:+.0f}% / "
+                               f"<b>{r['proj_p50']:+.0f}%</b> / "
+                               f"{r['proj_p75']:+.0f}% · 2x "
+                               f"{r['p_2x']:.0f}%")
+                if np.isfinite(pd.to_numeric(r.get("akum_jt"),
+                                             errors="coerce")):
+                    ekstra += (f"<br>🕵️ akum {r['akum_jt']:,.0f}jt · "
+                               f"top5 {r['konsentrasi_top5']:.0%} · "
+                               f"{r['broker_top']}")
                 kartu += f"""
 <div class="kartu">
   <span class="ms">{r['iq_score']:.0f}</span>
@@ -354,7 +500,7 @@ with tab1:
     R:R {rr} · risiko {r['risiko_pct']}%</div>
   <div class="insight">🕯️ {r['pola'] or '—'} · {r['fase']}<br>
     RSI {r['rsi_ema']} · RVOL {r['rvol']}x · ½K {r['kelly_%']}% ·
-    maks Rp{r['max_order_jt']}jt</div>
+    maks Rp{r['max_order_jt']}jt{ekstra}</div>
 </div>"""
             st.markdown(f'<div class="cardgrid">{kartu}</div>',
                         unsafe_allow_html=True)
@@ -365,7 +511,34 @@ with tab1:
                 nyaris[["ticker", "iq_score", "event", "bar_since", "kurang",
                         "price", "tp", "sl", "rr", "risiko_pct", "rvol",
                         "rsi_ema", "pola", "fase"]],
-                use_container_width=True, hide_index=True, height=240)
+                **lebar("dataframe"), hide_index=True, height=240)
+
+        if df["proj_p50"].notna().any():
+            st.markdown("#### 💎 PROYEKSI 12 BULAN — sebaran, bukan ramalan")
+            st.caption("Block bootstrap (blok 20 hari, jaga volatility "
+                       "clustering) dari return 2 tahun terakhir. Bacanya: "
+                       "*kalau perilaku harga ke depan mirip 2 tahun "
+                       "kebelakang, sebarannya segini.* Jarak p25→p75 yang "
+                       "lebar = ketidakpastiannya emang gede, bukan "
+                       "modelnya jelek. Kalau fundamental atau "
+                       "likuiditasnya berubah, angka ini nggak berlaku.")
+            st.dataframe(
+                df.dropna(subset=["proj_p50"]).nlargest(25, "iq_score")[
+                    ["ticker", "iq_score", "price", "proj_p25", "proj_p50",
+                     "proj_p75", "p_2x", "p_setengah", "atr_pct", "fase",
+                     "bandar_sumber"]],
+                **lebar("dataframe"), hide_index=True, height=300,
+                column_config={
+                    "proj_p50": st.column_config.NumberColumn(
+                        "median 12bln", format="%+.0f%%"),
+                    "proj_p25": st.column_config.NumberColumn(
+                        "p25", format="%+.0f%%"),
+                    "proj_p75": st.column_config.NumberColumn(
+                        "p75", format="%+.0f%%"),
+                    "p_2x": st.column_config.NumberColumn(
+                        "peluang 2x", format="%.0f%%"),
+                    "p_setengah": st.column_config.NumberColumn(
+                        "peluang -50%", format="%.0f%%")})
 
         st.markdown("#### 📋 SEMUA HASIL SCAN")
         pilih_v = st.multiselect("Filter verdict",
@@ -391,7 +564,7 @@ with tab1:
                              subset=["signal", "sinyal_v2", "mesin_grade",
                                      "iq_verdict", "event", "above_vwap",
                                      "vol_regime", "fase"]),
-            use_container_width=True, height=520, hide_index=True,
+            **lebar("dataframe"), height=520, hide_index=True,
             column_config={
                 "iq_score": st.column_config.ProgressColumn(
                     "alpha (0-100)", min_value=0, max_value=100,
@@ -417,7 +590,7 @@ with tab2:
                                    - fd["lolos kumulatif"]).astype(int)
         st.dataframe(fd[["syarat", "lolos sendiri", "lolos kumulatif",
                          "dipangkas di sini"]],
-                     use_container_width=True, hide_index=True)
+                     **lebar("dataframe"), hide_index=True)
         biang = fd.sort_values("dipangkas di sini", ascending=False).iloc[0]
         if biang["dipangkas di sini"] > 0:
             st.info(f"🎯 Gerbang paling menggigit: **{biang['syarat']}** — "
@@ -496,7 +669,7 @@ with tab3:
         sort_cols = [c for c in ("date", "ts") if c in j.columns]
         st.dataframe(j.sort_values(sort_cols, ascending=False)
                      if sort_cols else j,
-                     use_container_width=True, height=520, hide_index=True)
+                     **lebar("dataframe"), height=520, hide_index=True)
     else:
         st.info("Belum ada jurnal. Scan minimal sekali dulu.")
 
@@ -519,14 +692,14 @@ with tab4:
         if g is not None:
             hz = st.radio("Horizon", ["T1", "T3", "T5"], index=1,
                           horizontal=True)
-            st.dataframe(g[g["horizon"] == hz], use_container_width=True,
+            st.dataframe(g[g["horizon"] == hz], **lebar("dataframe"),
                          hide_index=True)
             with st.expander("Semua horizon sekaligus"):
-                st.dataframe(g, use_container_width=True, hide_index=True)
+                st.dataframe(g, **lebar("dataframe"), hide_index=True)
         st.markdown("#### 📜 Detail per sinyal")
         sc = "t3_ret" if "t3_ret" in ev.columns else ev.columns[-1]
         st.dataframe(ev.sort_values(sc, ascending=False, na_position="last"),
-                     use_container_width=True, height=400, hide_index=True)
+                     **lebar("dataframe"), height=400, hide_index=True)
     else:
         st.info("Evaluasi muncul setelah ada sinyal berumur ≥ 1 hari bursa "
                 "dan lo scan ulang.")

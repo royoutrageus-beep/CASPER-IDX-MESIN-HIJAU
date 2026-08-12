@@ -1,6 +1,7 @@
 # ===== RAHASIA — jangan pernah di-commit ke GitHub =====
 config_tele.json
 gsheet_creds.json
+arjum_config.json          # <-- BARU: isinya api_key Arjum
 .streamlit/secrets.toml
 *.env
 
@@ -10,6 +11,8 @@ jurnal_evaluasi.csv
 jurnal_sinyal_lama.csv
 tickers_idx.txt
 hasil_scan_casper.xlsx
+casper_terkirim.json       # <-- BARU: memori anti-spam Telegram
+cache_arjum/               # <-- BARU: cache response API per tanggal
 
 # ===== Python =====
 __pycache__/
