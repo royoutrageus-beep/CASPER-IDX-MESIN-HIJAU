@@ -1484,6 +1484,22 @@ def ambil_config_tele(conf=CONF_TELE):
 
 
 def _baca_terkirim(path=TERKIRIM):
+    """Memori anti-spam. DISIMPAN DI GOOGLE SHEETS kalau backend-nya aktif.
+
+    Kenapa: di Streamlit Cloud, disk aplikasi itu EPHEMERAL — hilang tiap
+    reboot / redeploy / app tidur. Kalau memori cuma di file JSON lokal,
+    tiap kali app bangun cooldown-nya reset dan ticker yang sama dikirim
+    ulang. Spam-nya balik lagi, cuma lebih jarang. Di Sheets dia awet.
+    """
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            rows = sh.worksheet("terkirim").get_all_records()
+            return {str(r["kunci"]): {"ts": str(r["ts"]),
+                                      "iq": r.get("iq", 0)} for r in rows
+                    if r.get("kunci")}
+        except Exception:                               # noqa: BLE001
+            return {}
     if os.path.exists(path):
         try:
             return json.load(open(path))
@@ -1493,6 +1509,19 @@ def _baca_terkirim(path=TERKIRIM):
 
 
 def _tulis_terkirim(memori, path=TERKIRIM):
+    sh = jurnal_backend()
+    if sh != "csv":
+        try:
+            ws = _worksheet(sh, "terkirim", ["kunci", "ts", "iq"])
+            ws.clear()
+            ws.append_row(["kunci", "ts", "iq"])
+            if memori:
+                ws.append_rows([[k, v["ts"], v.get("iq", 0)]
+                                for k, v in memori.items()])
+            return
+        except Exception as e:                          # noqa: BLE001
+            print(f"[!] Gagal simpan memori kirim ke Sheets ({e}) "
+                  "— fallback file lokal (hilang tiap reboot).")
     try:
         json.dump(memori, open(path, "w"), indent=1)
     except Exception as e:                              # noqa: BLE001

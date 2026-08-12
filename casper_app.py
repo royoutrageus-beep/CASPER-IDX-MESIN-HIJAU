@@ -27,6 +27,38 @@ import casper_engine as ce
 st.set_page_config(page_title="Casper IDX — Mesin Hijau", page_icon="👻",
                    layout="wide")
 
+# ══════════════════════════════════════════════════════════════════════
+#  PENJAGA VERSI — UI v4 butuh engine v4
+# ══════════════════════════════════════════════════════════════════════
+# Kalau cuma salah satu file yang ke-push ke repo (kejadian pas deploy
+# pertama: app.py v4 + engine v3.1), dulu yang muncul cuma
+# `AttributeError: module 'casper_engine' has no attribute 'VERSI'` —
+# traceback yang nggak nyeritain apa-apa. Sekarang dicek eksplisit.
+_WAJIB = ["VERSI", "DataKosong", "LAST_TELE", "FAKTOR", "COOLDOWN_JAM",
+          "MIN_HARGA", "FRESH_MAX_BAR", "bar_sejak_nyala", "tick_size",
+          "pilih_untuk_kirim", "porsi_sesi"]
+_hilang = [a for a in _WAJIB if not hasattr(ce, a)]
+if _hilang:
+    st.error(
+        "### ⚠️ Versi engine nggak cocok\n\n"
+        f"`casper_app.py` ini versi **4.0**, tapi `casper_engine.py` yang "
+        f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
+        f"kurang: `{'`, `'.join(_hilang[:5])}`"
+        + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
+        + "\n\n**Penyebab paling umum:** cuma satu file yang ke-push ke "
+        "repo. Dua-duanya harus versi 4.0 dan ada di folder yang sama.\n\n"
+        "Cek dari mesin lo:\n"
+        "```bash\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.0\"\n"
+        "git add casper_engine.py casper_app.py\n"
+        "git commit -m 'Casper v4.0'\n"
+        "git push\n"
+        "```\n"
+        "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "
+        "gerak: menu ⋮ di pojok kanan atas → **Reboot app**.")
+    st.caption(f"engine ter-load dari: `{getattr(ce, '__file__', '?')}`")
+    st.stop()
+
 HIJAU = "#A3E635"
 CSS = """
 <style>
