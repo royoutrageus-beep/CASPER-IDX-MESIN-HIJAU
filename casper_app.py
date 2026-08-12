@@ -1,23 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v2: Auto-Scan-on-Open + Auto-Mode
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.0
 ============================================================================
 Jalankan:  streamlit run casper_app.py
-Butuh:     pip install streamlit yfinance pandas numpy
-File lain: casper_engine.py + .streamlit/config.toml (satu folder)
+Butuh:     pip install streamlit yfinance pandas numpy pytz
+File lain: casper_engine.py (v4.0) di folder yang sama
 
-PATCH dari versi lama (persis pola Mesin Presisi):
-  * Auto-scan LANGSUNG jalan begitu browser dibuka — nggak perlu klik
-    "MULAI SCAN SEKARANG" dulu. Abis itu baru looping sendiri tiap
-    interval yang dipilih (15/30/60 menit), selama tab browser kebuka.
-  * Mode sinyal (Scalping/Momentum/Intraday/Swing/Bagger) sekarang bisa
-    AUTO — ikut regime IHSG (ce.get_market_regime()) — atau tetap bisa
-    di-override manual lewat sidebar.
+BEDA DARI v2:
+  * Panel FUNNEL — kalau nol sinyal BUY, keliatan GERBANG MANA yang nutup.
+    Dulu cuma muncul "nggak ada sinyal BUY" dan lo cuma bisa nebak.
+  * Tier NYARIS — saham yang cuma gagal di SATU syarat, plus syarat mana.
+  * Telegram: status dipisah 'terkirim' / 'diam (nggak ada yang baru)' /
+    'gagal kredensial'. Dulu ketiganya sama-sama nongol "❌ Gagal kirim".
+  * Kolom baru: event, bar_since (umur sinyal), pola candle, fase Wyckoff,
+    tp_dari/sl_dari (level TP/SL itu asalnya dari mana), risiko_pct.
+  * Header nampilin TANGGAL BAR DATA + status bar (TUTUP / BERJALAN / BASI)
+    — jadi ketahuan kalau lagi mindai data basi atau candle yang belum jadi.
 """
 
-import os
+import numpy as np
 import pandas as pd
 import streamlit as st
+
 import casper_engine as ce
 
 st.set_page_config(page_title="Casper IDX — Mesin Hijau", page_icon="👻",
@@ -44,7 +48,7 @@ h1,h2,h3 { color:#e7f5e1 !important; letter-spacing:.5px; }
 .banner .logo span { color:#A3E635; }
 .banner .sub { color:#7a9a6a; font-size:12px; letter-spacing:3px; }
 .banner .live { color:#A3E635; font-size:13px; border:1px solid #35521f;
-  border-radius:8px; padding:6px 12px; background:#0e1a0a; }
+  border-radius:8px; padding:6px 12px; background:#0e1a0a; text-align:right; }
 .statgrid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px;
   margin:6px 0 16px 0; }
 .stat { background:#0e150c; border:1px solid #223318; border-top:3px solid
@@ -59,7 +63,8 @@ h1,h2,h3 { color:#e7f5e1 !important; letter-spacing:.5px; }
 .kartu:hover { border-color:#A3E635; }
 .kartu .tkr { font-size:20px; font-weight:800; color:#fff; }
 .kartu .ms { float:right; color:#A3E635; font-weight:800; font-size:20px; }
-.kartu .hrg { color:#A3E635; font-size:14px; margin:2px 0 8px 0; }
+.kartu .hrg { color:#A3E635; font-size:14px; margin:2px 0 4px 0; }
+.kartu .ev { color:#ffc44d; font-size:11px; font-weight:700; margin-bottom:6px; }
 .chip { display:inline-block; font-size:11px; font-weight:700;
   border-radius:6px; padding:2px 8px; margin:2px 4px 2px 0; }
 .c-hijau { background:#1d310f; color:#A3E635; border:1px solid #4d7c22; }
@@ -73,12 +78,15 @@ h1,h2,h3 { color:#e7f5e1 !important; letter-spacing:.5px; }
 .quote { border-left:3px solid #A3E635; background:#0e150c; color:#cfe8bf;
   padding:10px 16px; border-radius:0 10px 10px 0; font-size:13px;
   margin-top:18px; }
-.stButton>button { background:#A3E635 !important; color:#0a0f0a !important;
-  font-weight:800 !important; border:0 !important; }
-.stButton>button:hover { box-shadow:0 0 16px rgba(163,230,53,.5); }
 .regime-box { border:1px solid #35521f44; border-left:4px solid #A3E635;
   border-radius:8px; padding:10px 14px; margin-bottom:10px;
   background:rgba(0,0,0,.25); font-size:11px; color:#cfe8bf; }
+.barwarn { border-left:4px solid #ffc44d; background:rgba(255,196,77,.08);
+  color:#ffe2a8; padding:8px 14px; border-radius:0 8px 8px 0;
+  font-size:12px; margin-bottom:10px; }
+.stButton>button { background:#A3E635 !important; color:#0a0f0a !important;
+  font-weight:800 !important; border:0 !important; }
+.stButton>button:hover { box-shadow:0 0 16px rgba(163,230,53,.5); }
 </style>"""
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -86,115 +94,134 @@ st.markdown(f"""
 <div class="banner">
   <div>
     <div class="logo">👻 CASPER <span>IDX</span> — MESIN HIJAU</div>
-    <div class="sub">EDUKASI • DATA • SISTEM • DISIPLIN</div>
+    <div class="sub">EDUKASI • DATA • SISTEM • DISIPLIN — engine v{ce.VERSI}</div>
   </div>
   <div class="live">● LIVE {ce.now_wib():%H:%M:%S} WIB<br>
   {ce.now_wib():%d %b %Y}</div>
 </div>""", unsafe_allow_html=True)
 
-# ------------------------------ SIDEBAR ---------------------------------
+# ══════════════════════════════ SIDEBAR ═════════════════════════════════
 with st.sidebar:
     st.markdown("### ⚙️ SCANNER SETTINGS")
     sumber = st.radio("Sumber data", ["Live (Yahoo Finance)", "Demo (simulasi)"])
     universe = st.radio("Cakupan", ["Semua IDX (~700)", "Custom"])
     custom = st.text_area("Ticker custom (tanpa .JK juga boleh)",
-                          "BBCA BBRI TLKM",
-                          disabled=universe != "Custom")
-    st.caption("Cakupan default sekarang Semua IDX (~700) — 12-saham "
-              "default lama dibuang biar Auto-Mode mindai seluruh pasar, "
-              "bukan cuma segelintir blue chip.")
+                          "BBCA BBRI TLKM", disabled=universe != "Custom")
 
     st.markdown("### 🎯 MODE SINYAL")
     auto_mode_on = st.toggle("🤖 Auto-Mode (ikuti regime IHSG)", value=True,
                              key="auto_mode_on")
     if auto_mode_on:
-        _reg_mode, _reg_price, _reg_e20, _reg_e55, _reg_label = ce.get_market_regime()
-        mode = _reg_mode
+        _m, _p, _ef, _es, _label = ce.get_market_regime(ce.LAST_CLOSE)
+        mode = _m
         st.markdown(f'<div class="regime-box">🎯 Auto: <b>{mode}</b> '
-                    f'{ce.MODES.get(mode, {}).get("emoji", "")}<br>{_reg_label}'
+                    f'{ce.MODES.get(mode, {}).get("emoji", "")}<br>{_label}'
                     f'</div>', unsafe_allow_html=True)
     else:
-        mode = st.selectbox("Mode sinyal (manual)",
-                            ["Scalping", "Momentum", "Intraday", "Swing",
-                             "Bagger"],
-                            format_func=lambda m: f"{m} {ce.MODES[m]['emoji']}")
+        mode = st.selectbox(
+            "Mode sinyal (manual)",
+            ["Scalping", "Intraday", "Momentum", "Swing", "Bagger"],
+            index=3, format_func=lambda m: f"{m} {ce.MODES[m]['emoji']}")
 
-    min_to = st.number_input("Min turnover/hari (juta Rp)",
-                             min_value=0, value=500, step=100)
-    st.caption("Tampilan dikunci ke sinyal BUY aja (iq_verdict) biar gak "
-              "kebanjiran data dari ~700 saham. Sinyal non-BUY tetap "
-              "ke-log lengkap di tab Journal.")
+    st.markdown("### 🔬 FILTER")
+    min_to = st.number_input("Min turnover/hari — MEDIAN (juta Rp)",
+                             min_value=0, value=int(ce.MIN_TURNOVER_JT),
+                             step=100)
+    min_harga = st.number_input("Harga minimum (Rp)", min_value=0,
+                                value=int(ce.MIN_HARGA), step=25)
+    min_iq = st.slider("Ambang alpha (persentil lintas saham)", 0, 100, 70,
+                       step=5,
+                       help="Sinyal BUY minimal masuk persentil ini. 70 = "
+                            "top 30% saham berdasarkan gabungan faktor.")
+    fresh = st.slider("Umur maksimal event (bar)", 0, 10, int(ce.FRESH_MAX_BAR),
+                      help="Sinyal cuma dianggap valid kalau kejadiannya "
+                           "(breakout / golden cross / reclaim pivot) terjadi "
+                           "dalam sekian bar terakhir. Inilah yang bikin "
+                           "saham yang sama nggak nongol terus tiap hari.")
+    max_risiko = st.slider("Risiko maksimal ke SL (%)", 1.0, 20.0, 8.0, 0.5)
+    min_rr = st.slider("R:R minimal", 1.0, 4.0, 1.5, 0.1)
+
     tombol_scan = st.button("🚀 SCAN MANUAL SEKARANG", use_container_width=True)
     st.divider()
+
     st.markdown("### 🔄 AUTO-SCAN")
-    st.caption("Begitu browser dibuka, Casper langsung scan sendiri — "
-              "gak perlu klik apa-apa. Abis itu dia looping otomatis "
-              "sesuai interval di bawah, selama tab ini kebuka.")
     auto_on = st.toggle("Auto-Scan aktif", value=True, key="auto_on")
     interval = st.selectbox("Interval Auto-Scan",
                             ["15 menit", "30 menit", "60 menit"],
                             disabled=not auto_on)
-    auto_tele = st.toggle("Kirim ke Telegram tiap selesai scan", value=True)
+    auto_tele = st.toggle("Kirim ke Telegram tiap ada sinyal BARU", value=True)
+    st.caption("Telegram cuma bunyi kalau ada sinyal yang BENERAN baru. "
+               f"Ticker + event yang sama nggak dikirim ulang dalam "
+               f"{ce.COOLDOWN_JAM} jam.")
     st.divider()
+
     st.markdown("### 📨 TELEGRAM")
     ada = ce.ambil_config_tele() is not None
-    st.caption(("✅ kredensial Telegram ditemukan" if ada else
-                "❌ isi config_tele.json / secrets dulu"))
+    st.caption("✅ kredensial ditemukan" if ada
+               else "❌ isi config_tele.json / secrets dulu")
     st.caption("🗄️ Jurnal: " + ce.backend_label())
-    tombol_tele = st.button("🔔 Kirim sinyal ke Telegram",
+    tombol_tele = st.button("🔔 Kirim top-8 sekarang (paksa)",
                             use_container_width=True,
                             disabled="hasil" not in st.session_state)
 
-# ------------------------------- SCAN -----------------------------------
+# ══════════════════════════════ SCAN ════════════════════════════════════
 _menit = int(interval.split()[0])
 
-# Auto-trigger: begitu browser dibuka (belum pernah ada hasil scan di
-# session ini) ATAU interval sudah lewat -> scan otomatis, TANPA nunggu
-# klik tombol. Persis pola heartbeat Mesin Presisi.
+
+def jalankan_scan(cfg):
+    df = ce.scan(**cfg)
+    ce.catat_jurnal(df)
+    ev = ce.evaluasi_jurnal()
+    return df, ev
+
+
 auto_trigger = False
 if auto_on:
     if "last_scan" not in st.session_state:
-        auto_trigger = True                              # baru buka browser
+        auto_trigger = True
     else:
-        _elapsed = (ce.now_wib() - st.session_state["last_scan"]).total_seconds()
-        if _elapsed >= _menit * 60 - 10:
-            auto_trigger = True                           # interval lewat
+        _el = (ce.now_wib() - st.session_state["last_scan"]).total_seconds()
+        auto_trigger = _el >= _menit * 60 - 10
 
 if tombol_scan or auto_trigger:
-    demo = sumber.startswith("Demo")
-    tickers, semua = None, False
-    if universe == "Custom":
-        tickers = custom.split()
-    else:
-        semua = True
-    with st.spinner(f"👻 Casper lagi mindai pasar (mode {mode})... "
-                    f"(Semua IDX ± 10-20 mnt)"):
-        df = ce.scan(tickers=tickers, demo=demo, semua=semua,
-                     mode=mode, min_turnover_jt=min_to)
-        ce.catat_jurnal(df)
-        ev = ce.evaluasi_jurnal(ce.LAST_CLOSE)
-    st.session_state["hasil"], st.session_state["eval"] = df, ev
-    st.session_state["cfg"] = {"tickers": tickers, "demo": demo,
-                               "semua": semua, "mode": mode,
-                               "min_turnover_jt": min_to,
-                               "auto_mode_on": auto_mode_on}
-    st.session_state["last_scan"] = ce.now_wib()
-    st.success(f"✅ {len(df)} saham lolos filter (mode {mode}) — "
-              f"otomatis ke-log di Journal.")
-    if auto_tele:
-        if ce.kirim_tele(df):
-            st.success("🚀 Hasil scan langsung terkirim ke Telegram!")
-        else:
-            st.warning("❌ Gagal kirim Telegram — cek kredensial")
+    cfg = {"tickers": custom.split() if universe == "Custom" else None,
+           "demo": sumber.startswith("Demo"),
+           "semua": universe != "Custom",
+           "mode": mode, "min_turnover_jt": min_to, "min_harga": min_harga,
+           "fresh_max": fresh, "min_iq": float(min_iq),
+           "max_risiko": float(max_risiko), "min_rr": float(min_rr)}
+    with st.spinner(f"👻 Casper lagi mindai pasar (mode {mode})..."):
+        try:
+            df, ev = jalankan_scan(cfg)
+        except ce.DataKosong as e:
+            st.error(f"📡 {e}")
+            df, ev = None, None
+        except Exception as e:                          # noqa: BLE001
+            st.error(f"💥 Scan gagal: {type(e).__name__}: {e}")
+            df, ev = None, None
+    if df is not None:
+        st.session_state.update(hasil=df, eval=ev, cfg=cfg,
+                                meta=dict(ce.LAST_META),
+                                auto_mode_on=auto_mode_on,
+                                last_scan=ce.now_wib())
+        st.success(f"✅ {len(df)} saham lolos filter kualitas (mode {mode}).")
+        if auto_tele:
+            ok = ce.kirim_tele(df)
+            stt = ce.LAST_TELE.get("status")
+            if ok:
+                st.success(f"🚀 {ce.LAST_TELE['n']} sinyal BARU dikirim "
+                           "ke Telegram.")
+            elif stt == "diam":
+                st.info("🔕 Nggak ada sinyal baru — Telegram sengaja diam "
+                        "(anti-spam).")
+            else:
+                st.warning(f"❌ Telegram: {stt}")
 
 if tombol_tele and "hasil" in st.session_state:
-    ok = ce.kirim_tele(st.session_state["hasil"])
-    if ok:
-        st.toast("🚀 Terkirim ke Telegram!")
-    else:
-        st.toast("❌ Gagal — cek kredensial Telegram")
+    ce.kirim_tele(st.session_state["hasil"], paksa=True)
+    st.toast(f"Telegram: {ce.LAST_TELE.get('status')}")
 
-# --------------------------- AUTO-SCAN BERKALA ---------------------------
+
 @st.fragment(run_every=_menit * 60
              if (auto_on and "cfg" in st.session_state) else None)
 def auto_scan():
@@ -204,185 +231,275 @@ def auto_scan():
     last = ss.get("last_scan")
     if last is not None and \
        (ce.now_wib() - last).total_seconds() < _menit * 60 - 10:
-        return                      # belum waktunya, tunggu jadwal
+        return
     cfg = dict(ss["cfg"])
-    if cfg.get("auto_mode_on"):
-        # regime bisa berubah antar siklus -> re-evaluasi tiap kali,
-        # bukan kepakai mode lama terus-terusan
-        cfg["mode"], *_ = ce.get_market_regime()
-    df = ce.scan(**{k: v for k, v in cfg.items() if k != "auto_mode_on"})
-    ce.catat_jurnal(df)
-    ss["hasil"] = df
-    ss["eval"] = ce.evaluasi_jurnal(ce.LAST_CLOSE)
-    ss["last_scan"] = ce.now_wib()
-    ss["cfg"] = cfg
+    if ss.get("auto_mode_on"):
+        cfg["mode"], *_ = ce.get_market_regime(ce.LAST_CLOSE)
+    try:
+        df, ev = jalankan_scan(cfg)
+    except Exception as e:                              # noqa: BLE001
+        ss["scan_error"] = f"{type(e).__name__}: {e}"
+        ss["last_scan"] = ce.now_wib()
+        return
+    ss.update(hasil=df, eval=ev, cfg=cfg, meta=dict(ce.LAST_META),
+              last_scan=ce.now_wib(), scan_error=None)
     if auto_tele:
         ce.kirim_tele(df)
     st.rerun(scope="app")
 
+
 auto_scan()
 
+meta = st.session_state.get("meta", {})
 if "last_scan" in st.session_state:
-    st.caption(f"🕒 Scan terakhir {st.session_state['last_scan']:%H:%M:%S} WIB"
-               + (f" · 🔄 Auto-Scan ON tiap {interval}"
-                  + (" + auto-Telegram" if auto_tele else "")
-                  if auto_on else " · Auto-Scan OFF"))
+    st.caption(
+        f"🕒 Scan terakhir {st.session_state['last_scan']:%H:%M:%S} WIB · "
+        f"📅 bar data **{meta.get('data_date', '?')}** "
+        f"({meta.get('bar', '?')})"
+        + (f" · 🔄 Auto tiap {interval}" if auto_on else " · Auto OFF"))
+if str(meta.get("bar", "")).startswith("BASI"):
+    st.markdown(
+        f'<div class="barwarn">⚠️ Data terakhir dari '
+        f'<b>{meta.get("data_date")}</b> — {meta.get("bar")}. Sinyal '
+        'dihitung dari bar itu, bukan dari harga hari ini. Kalau bursa '
+        'lagi buka, kemungkinan feed Yahoo lagi telat.</div>',
+        unsafe_allow_html=True)
+elif str(meta.get("bar", "")).startswith("BERJALAN"):
+    st.markdown(
+        f'<div class="barwarn">🕘 Candle hari ini <b>belum selesai</b> '
+        f'({meta.get("bar")}). RVOL udah diskalakan ke porsi sesi yang '
+        'lewat, tapi close/high/low masih bisa berubah sampai penutupan.'
+        '</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["🔥 Scanner", "📓 Journal", "✅ Bukti Statistik"])
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["🔥 Scanner", "🔬 Kenapa segini", "📓 Journal", "✅ Bukti Statistik"])
 
-# ------------------------------ SCANNER ----------------------------------
+# ══════════════════════════════ SCANNER ═════════════════════════════════
 with tab1:
     if "hasil" not in st.session_state:
         st.info("👻 Menunggu scan pertama jalan otomatis...")
     else:
         df = st.session_state["hasil"]
-        tampil = df[df["iq_verdict"] == "BUY"].copy()
+        buy = df[df["iq_verdict"] == "BUY"].copy()
+        nyaris = df[df["iq_verdict"] == "NYARIS"].copy()
 
-        n_buy = len(tampil)
-        n_gcr = int(tampil["signal"].str.startswith("GACOR").sum()) if n_buy else 0
-        n_pot = int(tampil["signal"].str.startswith("POTENSIAL").sum()) if n_buy else 0
-        avg_rsi_buy = float(tampil["rsi_ema"].mean()) if n_buy else 0.0
-        top_skor_buy = float(tampil["score"].max()) if n_buy else 0.0
         st.markdown(f"""
 <div class="statgrid">
- <div class="stat"><div class="lbl">Discan (semua)</div><div class="val">{len(df)}</div></div>
- <div class="stat"><div class="lbl">Sinyal BUY</div><div class="val">{n_buy}</div></div>
- <div class="stat"><div class="lbl">Gacor ⚡</div><div class="val">{n_gcr}</div></div>
- <div class="stat"><div class="lbl">Potensial 🔥</div><div class="val">{n_pot}</div></div>
- <div class="stat"><div class="lbl">Avg RSI-EMA (BUY)</div><div class="val">{avg_rsi_buy:.1f}</div></div>
- <div class="stat"><div class="lbl">Skor Top (BUY)</div><div class="val">{top_skor_buy:.1f}</div></div>
+ <div class="stat"><div class="lbl">Discan</div><div class="val">{len(df)}</div></div>
+ <div class="stat"><div class="lbl">Sinyal BUY</div><div class="val">{len(buy)}</div></div>
+ <div class="stat"><div class="lbl">Nyaris (kurang 1)</div><div class="val">{len(nyaris)}</div></div>
+ <div class="stat"><div class="lbl">Event fresh</div><div class="val">{int(df['event_kuat'].sum())}</div></div>
+ <div class="stat"><div class="lbl">Median R:R</div><div class="val">{df['rr'].median():.2f}</div></div>
+ <div class="stat"><div class="lbl">Median risiko</div><div class="val">{df['risiko_pct'].median():.1f}%</div></div>
 </div>""", unsafe_allow_html=True)
-        if not n_buy:
-            st.warning("⚠️ Nggak ada sinyal BUY di scan ini — market lagi "
-                      "gak ngasih setup yang layak. Semua hasil (termasuk "
-                      "WAIT/HOLD) tetap ke-log di tab Journal buat evaluasi.")
 
-        st.markdown("#### 🎯 TOP SIGNALS")
-        kartu = ""
-        for _, r in tampil.head(10).iterrows():
-            g = r["mesin_grade"]
-            warna = ("c-biru" if "BANDAR" in g else
-                     "c-hijau" if ("PRESISI" in g or "KUAT" in g) else
-                     "c-merah" if "WAIT" in g else "c-abu")
-            vw = "Above VWAP" if r["above_vwap"] else "Below VWAP"
-            kartu += f"""
+        if buy.empty:
+            st.warning("⚠️ Nol sinyal BUY. Itu **bukan** error — buka tab "
+                       "**🔬 Kenapa segini** buat lihat gerbang mana yang "
+                       "nutup, dan lihat daftar NYARIS di bawah.")
+
+        if not buy.empty:
+            st.markdown("#### 🎯 SINYAL BARU")
+            kartu = ""
+            for _, r in buy.head(10).iterrows():
+                g = str(r["mesin_grade"])
+                warna = ("c-biru" if "BANDAR" in g else
+                         "c-hijau" if ("PRESISI" in g or "LAYAK" in g) else
+                         "c-merah" if "WAIT" in g else "c-abu")
+                rr = f"{r['rr']:.2f}" if np.isfinite(r["rr"]) else "-"
+                kartu += f"""
 <div class="kartu">
-  <span class="ms">{r['mesin_score']:.0f}</span>
+  <span class="ms">{r['iq_score']:.0f}</span>
   <div class="tkr">{r['ticker']}</div>
   <div class="hrg">Rp{r['price']:,.0f} · ATR {r['atr_pct']}%</div>
+  <div class="ev">⚡ {r['event']} · {int(r['bar_since'])} bar lalu</div>
   <span class="chip {warna}">{g}</span>
-  <span class="chip c-hijau">TT:{r['signal']}</span>
-  <span class="chip {'c-hijau' if r['iq_verdict']=='BUY' else 'c-abu'}">
-    {r['iq_verdict']} · IQ {r['iq_score']:.0f}</span>
-  <div class="tpsl">🎯 TP <b class="tp">{r['tp']:,.0f}</b> ·
-    🔴 SL <b class="sl">{r['sl']:,.0f}</b> · R:R {r['rr']}</div>
-  <div class="insight">💡 RSI-EMA {r['rsi_ema']} · RVOL {r['rvol']}x ·
-    {vw} · {r['sinyal_v2']} · ½K {r['kelly_%']}%</div>
+  <span class="chip c-hijau">{r['signal']}</span>
+  <div class="tpsl">🎯 TP <b class="tp">{r['tp']:,.0f}</b>
+    <span style="font-size:10px">({r['tp_dari']})</span> ·
+    🔴 SL <b class="sl">{r['sl']:,.0f}</b>
+    <span style="font-size:10px">({r['sl_dari']})</span><br>
+    R:R {rr} · risiko {r['risiko_pct']}%</div>
+  <div class="insight">🕯️ {r['pola'] or '—'} · {r['fase']}<br>
+    RSI {r['rsi_ema']} · RVOL {r['rvol']}x · ½K {r['kelly_%']}% ·
+    maks Rp{r['max_order_jt']}jt</div>
 </div>"""
-        st.markdown(f'<div class="cardgrid">{kartu}</div>',
-                    unsafe_allow_html=True)
+            st.markdown(f'<div class="cardgrid">{kartu}</div>',
+                        unsafe_allow_html=True)
 
-        st.markdown("#### 📋 FULL SIGNAL TABLE")
+        if not nyaris.empty:
+            st.markdown("#### 🟡 NYARIS — gagal cuma di satu syarat")
+            st.dataframe(
+                nyaris[["ticker", "iq_score", "event", "bar_since", "kurang",
+                        "price", "tp", "sl", "rr", "risiko_pct", "rvol",
+                        "rsi_ema", "pola", "fase"]],
+                use_container_width=True, hide_index=True, height=240)
+
+        st.markdown("#### 📋 SEMUA HASIL SCAN")
+        pilih_v = st.multiselect("Filter verdict",
+                                 ["BUY", "NYARIS", "HOLD", "WAIT"],
+                                 default=["BUY", "NYARIS", "HOLD"])
+        tampil = df[df["iq_verdict"].isin(pilih_v)]
+
         def warnai(x):
             s = str(x)
-            if any(k in s for k in ("GACOR", "HAKA", "BUY", "NAIK", "BANDAR",
-                                    "PRESISI", "KUAT", "True")):
+            if any(k in s for k in ("GACOR", "HAKA", "BUY", "BANDAR",
+                                    "PRESISI", "LAYAK", "BREAKOUT",
+                                    "GOLDEN", "True")):
                 return f"color:{HIJAU};font-weight:700"
-            if any(k in s for k in ("WAIT", "TURUN", "False", "SPIKE")):
+            if any(k in s for k in ("WAIT", "False", "SPIKE", "Mark-Down")):
                 return "color:#ff7b6b"
-            if "POTENSIAL" in s or "HOLD" in s:
+            if any(k in s for k in ("POTENSIAL", "HOLD", "NYARIS", "⚠️",
+                                    "Distribusi")):
                 return "color:#ffc44d"
             return ""
-        styler = (tampil.style
-                  .map(warnai, subset=["signal", "sinyal_v2", "mesin_grade",
-                                       "iq_verdict", "above_vwap",
-                                       "vol_regime"])
-                  .format({"price": "{:,.0f}", "tp": "{:,.0f}",
-                           "sl": "{:,.0f}"}))
-        st.dataframe(styler, use_container_width=True, height=520,
-                     hide_index=True,
-                     column_config={
-                         "score": st.column_config.ProgressColumn(
-                             "score", min_value=0, max_value=10, format="%.1f"),
-                         "mesin_score": st.column_config.ProgressColumn(
-                             "mesin_score", min_value=0, max_value=100,
-                             format="%.0f")})
 
-        with st.expander("🧮 Audit matematika — rumus & bobot skor"):
-            st.markdown("""
-| Komponen | Bobot | Syarat |
+        st.dataframe(
+            tampil.style.map(warnai,
+                             subset=["signal", "sinyal_v2", "mesin_grade",
+                                     "iq_verdict", "event", "above_vwap",
+                                     "vol_regime", "fase"]),
+            use_container_width=True, height=520, hide_index=True,
+            column_config={
+                "iq_score": st.column_config.ProgressColumn(
+                    "alpha (0-100)", min_value=0, max_value=100,
+                    format="%.0f"),
+                "mesin_score": st.column_config.ProgressColumn(
+                    "eksekusi", min_value=0, max_value=100, format="%.0f")})
+
+# ══════════════════════════ KENAPA SEGINI ═══════════════════════════════
+with tab2:
+    st.markdown("#### 🔬 FUNNEL — gerbang mana yang nutup")
+    st.caption("`lolos sendiri` = berapa saham lolos syarat ini kalau "
+               "syarat lain diabaikan. `lolos kumulatif` = yang lolos "
+               "syarat ini DAN semua syarat di atasnya. Baris yang bikin "
+               "kumulatifnya anjlok — itu penyebabnya.")
+    f = st.session_state.get("meta", {}).get("funnel")
+    if f:
+        fd = pd.DataFrame([{"syarat": k, "lolos sendiri": v["lolos_sendiri"],
+                            "lolos kumulatif": v["lolos_kumulatif"]}
+                           for k, v in f.items()])
+        fd["sisa setelah gerbang ini"] = fd["lolos kumulatif"]
+        fd["dipangkas di sini"] = (fd["lolos kumulatif"].shift(1)
+                                   .fillna(fd["lolos kumulatif"].iloc[0])
+                                   - fd["lolos kumulatif"]).astype(int)
+        st.dataframe(fd[["syarat", "lolos sendiri", "lolos kumulatif",
+                         "dipangkas di sini"]],
+                     use_container_width=True, hide_index=True)
+        biang = fd.sort_values("dipangkas di sini", ascending=False).iloc[0]
+        if biang["dipangkas di sini"] > 0:
+            st.info(f"🎯 Gerbang paling menggigit: **{biang['syarat']}** — "
+                    f"mangkas {int(biang['dipangkas di sini'])} saham.")
+    else:
+        st.info("Scan dulu sekali.")
+
+    with st.expander("🧮 Audit matematika — rumus, sumber, dan bobot",
+                     expanded=False):
+        st.markdown(f"""
+**Satu skor, bukan tiga.** v3.1 punya `score`, `mesin_score`, `iq_score`
+yang korelasinya 0.89–0.98 — tiga kolom berisi informasi yang sama, dan
+`rvol` dihitung dua kali di dalamnya. Sekarang:
+
+| Kolom | Ngukur apa | Sumber |
 |---|---|---|
-| Trend naik | 2.0 | close > MA cepat > MA lambat (sesuai mode) |
-| Relative volume | 2.0 | min(rvol/2, 1) |
-| Momentum RSI | 2.0 | RSI-EMA(9) di zona mode |
-| Di atas VWAP20 | 1.0 | close > VWAP 20 hari |
-| Return periode mode | 2.0 | min(retN/target, 1) jika positif |
-| ATR layak | 1.0 | ATR% di zona mode |
+| `iq_score` / `alpha` | seberapa bagus sahamnya **relatif ke saham lain** | gabungan faktor, demeaned rank |
+| `mesin_score` | seberapa layak sinyalnya **dieksekusi** (likuiditas, lebar stop, R:R) | mikro-struktur |
+| `event` + `bar_since` | **kejadian apa** yang baru terjadi & berapa bar lalu | 3.12–3.15 |
 
-`signal` GACOR ≥ 6 · POTENSIAL ≥ 4.5 — `mesin_score` = score/10×60 +
-min(rvol/3,1)×25 + 15×(>VWAP) — `iq_verdict` **BUY jika iq ≥ 65 + trend naik
-+ di atas VWAP + RVOL ≥ 1.5** — TP = harga + 1.9×ATR, SL = harga − 1×ATR
+**Gabungan faktor — demeaned rank (buku eq. 276–277):**
 
-**Auto-Mode (regime IHSG):** RALLY (IHSG di atas EMA20 & EMA55, +8%/20 hari)
-→ Bagger 💎 · UPTREND mapan (di atas EMA20 & EMA55) → Swing 🌙 ·
-Recovery/breakout awal (di atas EMA20 doang) → Momentum 🚀 · BEARISH
-(di bawah EMA20 & EMA55, turun) → Scalping ⚡ · SIDEWAYS/netral → Intraday
-🌤️. Bisa dimatiin kapan aja dan pilih mode manual dari sidebar.
+```
+s_Ai = rank(f_Ai) − (1/N) Σ_j rank(f_Aj)
+s_i  = Σ_A w_A · s_Ai  /  Σ_A w_A
+```
 
-**Lapisan risiko kuantitatif:** `vol_regime` = vol EWMA λ0.94 vs rata2 60
-hari (volatility clustering) · `var5_pct` = VaR 5% empiris dari distribusi
-asli (fat tails) · `max_order_jt` = order maks agar impact σ√(Q/ADV) ≤ 0.5%
-(square-root law) · `kelly_%` = half-Kelly dari rekam jejak jurnal sendiri,
-cap 10% (Kelly criterion, aktif setelah ≥ 10 sampel evaluasi per label).
+| Faktor | Rumus | Bab buku | Bobot |
+|---|---|---|---|
+| `f_mom` | R^risk.adj = R^mean / σ, formation T, skip S | 3.1 (eq. 268–269) | {ce.FAKTOR['f_mom']} |
+| `f_resmom` | momentum dari residual regresi ke IHSG | 3.7 (eq. 278–281) | {ce.FAKTOR['f_resmom']} |
+| `f_lowvol` | −σ 126 hari | 3.4 | {ce.FAKTOR['f_lowvol']} |
+| `f_meanrev` | −(R_i − R̄) lintas cluster | 3.9 (eq. 292–294) | {ce.FAKTOR['f_meanrev']} |
+| `f_trend` | EMA_cepat / EMA_lambat − 1 | 3.11–3.13 | {ce.FAKTOR['f_trend']} |
+| `f_vol` | log(RVOL) | poster: konfirmasi volume | {ce.FAKTOR['f_vol']} |
 
-Tiap mode (Scalping ⚡ / Momentum 🚀 / Intraday 🌤️ / Swing 🌙 / Bagger 💎)
-punya rentang RSI, ATR, periode return, dan pasangan MA sendiri. Saham dengan
-turnover harian di bawah ambang likuiditas dibuang sebelum dinilai.
+Rank kebal outlier — itu sebabnya buku pakai ini, dan sebabnya saham
+gorengan ATR 14% nggak bisa lagi ngisi skor sempurna kayak di v3.1.
+
+**Kenapa `f_resmom` penting buat IDX:** kalau IHSG lagi rally, hampir semua
+saham momentumnya positif. Tanpa membuang beta pasar, scanner nggak bisa
+bedain "saham ini kuat" dari "pasarnya lagi naik" — dan hasilnya sinyal
+numpuk seragam.
+
+**Event, bukan keadaan.** Sinyal cuma valid kalau kejadiannya masih fresh:
+- `BREAKOUT 🚀` — close > Donchian ceiling {'{'}T{'}'} bar (eq. 329–331) **+ RVOL ≥ 1.5**
+- `GOLDEN CROSS ✨` — EMA cepat nyilang EMA lambat (eq. 322), kuat kalau 3 MA searah (eq. 324)
+- `RECLAIM PIVOT 🎯` — close ≥ pivot C setelah ≥3 bar di bawahnya (eq. 325–328)
+- pola candle bullish **dengan** trend + volume + di atas pivot
+
+**TP/SL.** Stop dulu dari struktur (pivot S / Donchian floor, dibatasi 3 ATR),
+target = resistance struktural pertama yang jaraknya ≥ 1R, kalau nggak ada
+pakai 2R murni — dan labelnya jujur di kolom `tp_dari`. Semua di-snap ke
+fraksi harga IDX (1/2/5/10/25) biar bisa beneran dipasang di order book.
+
+**Risiko.** `vol_regime` = EWMA λ0.94 vs realized σ 60 hari · `var5_pct` =
+VaR 5% empiris · `max_order_jt` = square-root law, impact σ√(Q/ADV) ≤ 0.5%,
+dicap 5% ADV · `kelly_%` = half-Kelly dari jurnal sendiri, **butuh ≥ 30
+sampel** (v3.1 pakai 10 — di n=10 standard error win-rate ±16 poin, itu
+noise yang dipoles).
 """)
 
-# ------------------------------ JOURNAL ----------------------------------
-with tab2:
+# ══════════════════════════════ JOURNAL ═════════════════════════════════
+with tab3:
     j = ce.baca_jurnal()
     if j is not None and len(j):
-        st.caption(f"📓 {len(j)} sinyal terekam otomatis di "
-                   f"{ce.backend_label()} — sistem nggak bisa "
-                   "pilih-pilih atau 'lupa'. Semua kebukti di sini.")
-        st.dataframe(j.sort_values(["date", "ts"], ascending=False),
+        dup = len(j) - len(j.drop_duplicates(
+            subset=[c for c in ("date", "ticker", "mode") if c in j.columns]))
+        st.caption(f"📓 {len(j)} baris di {ce.backend_label()} · "
+                   f"duplikat (date+ticker+mode): {dup}")
+        if dup:
+            st.warning(f"⚠️ Ada {dup} baris duplikat — itu peninggalan "
+                       "jurnal v3.1. Baris baru dari v4.0 udah di-dedup. "
+                       "Bersihin dengan: hapus/arsipkan `jurnal_sinyal.csv` "
+                       "atau de-dup manual sebelum dipakai buat statistik.")
+        sort_cols = [c for c in ("date", "ts") if c in j.columns]
+        st.dataframe(j.sort_values(sort_cols, ascending=False)
+                     if sort_cols else j,
                      use_container_width=True, height=520, hide_index=True)
     else:
         st.info("Belum ada jurnal. Scan minimal sekali dulu.")
 
-# --------------------------- BUKTI STATISTIK -----------------------------
-with tab3:
+# ═══════════════════════════ BUKTI STATISTIK ════════════════════════════
+with tab4:
     ev = st.session_state.get("eval")
     if ev is None:
         ev = ce.baca_evaluasi()
     if ev is not None and len(ev):
-        g = ce.ringkas_evaluasi(ev)
-        st.markdown("#### 🏆 WIN RATE PER LABEL — horizon T+1 / T+3 / T+5")
-        st.caption("Fixed horizon (hari bursa dari tanggal sinyal) — bukan "
-                   "'harga sekarang' yang ngambang lagi, biar sinyal lama "
-                   "dan baru dibandingin apples-to-apples. Kalau GACOR/BUY "
-                   "gak konsisten lebih baik dari WATCH/WAIT di semua "
-                   "horizon, itu tanda score-nya belum ada edge.")
+        per = st.radio("Kelompokkan per", ["event", "signal", "mesin_grade"],
+                       horizontal=True)
+        g = ce.ringkas_evaluasi(ev, per=per)
+        st.markdown("#### 🏆 WIN RATE — horizon T+1 / T+3 / T+5 hari bursa")
+        st.caption("Diukur dari **tanggal bar data**, bukan tanggal scan. "
+                   "Kelompokkan per `event` buat jawab pertanyaan yang "
+                   "beneran penting: breakout beneran lebih baik dari "
+                   "golden cross, nggak? Kalau BUY nggak konsisten lebih "
+                   "baik dari WAIT di semua horizon, berarti belum ada edge "
+                   "— dan itu informasi yang berharga, bukan aib.")
         if g is not None:
-            horizon_pilih = st.radio("Horizon", ["T1", "T3", "T5"],
-                                     index=1, horizontal=True, key="hz_pilih")
-            st.dataframe(g[g["horizon"] == horizon_pilih],
-                        use_container_width=True, hide_index=True)
-            with st.expander("Lihat semua horizon sekaligus"):
+            hz = st.radio("Horizon", ["T1", "T3", "T5"], index=1,
+                          horizontal=True)
+            st.dataframe(g[g["horizon"] == hz], use_container_width=True,
+                         hide_index=True)
+            with st.expander("Semua horizon sekaligus"):
                 st.dataframe(g, use_container_width=True, hide_index=True)
-        else:
-            st.info("Belum ada sinyal yang cukup umur buat T+1 (butuh "
-                    "minimal 1 hari bursa lewat).")
         st.markdown("#### 📜 Detail per sinyal")
-        sort_col = "t3_ret" if "t3_ret" in ev.columns else ev.columns[-1]
-        st.dataframe(ev.sort_values(sort_col, ascending=False, na_position="last"),
+        sc = "t3_ret" if "t3_ret" in ev.columns else ev.columns[-1]
+        st.dataframe(ev.sort_values(sc, ascending=False, na_position="last"),
                      use_container_width=True, height=400, hide_index=True)
     else:
-        st.info("Evaluasi muncul setelah ada sinyal berumur ≥ 1 hari "
+        st.info("Evaluasi muncul setelah ada sinyal berumur ≥ 1 hari bursa "
                 "dan lo scan ulang.")
 
-st.markdown('<div class="quote">💬 "Sistem yang baik mengalahkan keputusan '
-            'yang emosional." — Insight Casper · bukan rekomendasi '
+st.markdown('<div class="quote">💬 Scanner ini ngasih <b>kandidat + '
+            'alasan + level</b>, bukan ramalan. Kalau nol sinyal, itu '
+            'jawaban yang sah — bukan kerusakan. · bukan rekomendasi '
             'beli/jual</div>', unsafe_allow_html=True)
