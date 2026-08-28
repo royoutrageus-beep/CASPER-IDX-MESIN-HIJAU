@@ -48,14 +48,33 @@ def main():
     at.run()
     ok &= cek(at, "rerun kedua (uji bentrok session_state vs widget)")
 
+    # Cari widget lewat LABEL, bukan indeks. Indeks gampang geser tiap
+    # ada widget baru — dan waktu itu terjadi, tesnya nggak error, dia
+    # cuma DIAM-DIAM nggak nguji apa-apa. Itu lebih bahaya dari gagal.
+    def cari(kumpulan, teks):
+        for w in kumpulan:
+            if teks.lower() in (getattr(w, "label", "") or "").lower():
+                return w
+        raise AssertionError(
+            f"widget '{teks}' nggak ketemu — label berubah? "
+            f"yang ada: {[getattr(w, 'label', '') for w in kumpulan]}")
+
+    cari(at.toggle, "Auto-Mode").set_value(False)
+    at.run()
     for m in ("BSJP", "Intraday", "Bagger"):
-        at.toggle[0].set_value(False)          # matiin Auto-Mode
+        cari(at.selectbox, "Mode sinyal").set_value(m)
         at.run()
-        sel = [s for s in at.selectbox if "Mode sinyal" in (s.label or "")]
-        if sel:
-            sel[0].set_value(m)
+        ok &= cek(at, f"mode {m}")
+
+    # toggle kebaruan: nyala (default) vs mati harus sama-sama render
+    for nyala in (True, False):
+        try:
+            cari(at.toggle, "belum pernah nongol").set_value(nyala)
             at.run()
-            ok &= cek(at, f"mode {m}")
+            ok &= cek(at, f"filter kebaruan = {nyala}")
+        except AssertionError:
+            print("ℹ️  toggle kebaruan nggak muncul (nol sinyal BUY) — dilewati")
+            break
 
     # klik tab-tab: funnel, journal, bukti statistik
     at.run()

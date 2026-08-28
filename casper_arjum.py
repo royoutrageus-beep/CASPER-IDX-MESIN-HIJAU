@@ -90,7 +90,7 @@ DEFAULT_KONFIG = {
     "field_induk": {"ticker": ["stock_code", "code", "symbol"],
                     "tanggal": ["latest_date", "broker_end", "date"]},
     "jalur_data": ["brokers", "data", "results", "items", "rows"],
-    "broker_limit": 30,
+    "broker_limit": 200,
 }
 
 
@@ -280,8 +280,13 @@ def broker_summary(code, start_date=None, end_date=None, flow="all",
     tiap baris broker — jadi ditarik turun ke tiap baris di sini.
     """
     cfg = cfg or muat_konfig()
-    par = {"flow": flow,
-           "broker_limit": broker_limit or cfg.get("broker_limit", 30)}
+    # all_data=true: KONSENTRASI cuma ada artinya kalau dihitung dari
+    # SELURUH broker. Dengan broker_limit, "top5 / total" itu jadi
+    # "top5 dari 30 teratas" — dan angkanya otomatis mepet 100% buat
+    # semua saham (di layar sempat kelihatan ICBP top5 = 97%, mustahil
+    # buat saham selikuid itu). Jadi ambil lengkap, batasi di sisi kita.
+    par = {"flow": flow, "all_data": "true",
+           "broker_limit": broker_limit or cfg.get("broker_limit", 200)}
     if start_date:
         par["start_date"] = start_date
     if end_date:

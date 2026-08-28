@@ -79,7 +79,7 @@ import numpy as np
 import pandas as pd
 import pytz
 
-VERSI = "4.2.2"
+VERSI = "4.3"
 TZ_WIB = pytz.timezone("Asia/Jakarta")
 
 
@@ -688,7 +688,21 @@ def fitur_ticker(o, h, l, c, v, mode="Swing",
     ov_rata = ov_mean * 100
 
     # ---- pola candle & fase ---------------------------------------------
-    pola = deteksi_candle(o, h, l, c)
+    # PENTING: pola candle CUMA sah di bar yang UDAH TUTUP.
+    # Di bar berjalan, range High-Low belum penuh, jadi body kelihatan
+    # mendominasi range dan pola kayak Marubozu/Engulfing/Harami kepicu
+    # jauh lebih sering. Diukur di data simulasi: yang kena pola bullish
+    # 1.3% (bar tutup) -> 5.3% (range 35%, ~jam 10) -> 16% (range 20%,
+    # ~jam 09:15). Dua belas kali lipat, semuanya palsu.
+    # Kalau bar hari ini masih jalan, yang dibaca bar KEMARIN (yang udah
+    # final), dan umurnya dicatat 1 bar — bukan 0.
+    if bar_partial:
+        pola = deteksi_candle(o.iloc[:-1], h.iloc[:-1], l.iloc[:-1],
+                              c.iloc[:-1])
+        pola_umur = 1
+    else:
+        pola = deteksi_candle(o, h, l, c)
+        pola_umur = 0
     fase = fase_wyckoff(c, v)
 
     return {
@@ -710,7 +724,8 @@ def fitur_ticker(o, h, l, c, v, mode="Swing",
         "di_atas_pivot": bool(di_atas_pivot), "kena_resist": bool(kena_resist),
         "bar_since_pivot": int(bar_since_pivot), "exit_2pct": exit_2pct,
         "ret_form": ret_form,
-        "pola": pola, "fase": fase,
+        "pola": pola, "pola_umur": pola_umur, "fase": fase,
+        "bar_partial": bool(bar_partial),
         "close_str": round(close_str, 3),
         "low_hari": float(l.iloc[-1]),
         "ov_menang_pct": (round(ov_menang, 1) if np.isfinite(ov_menang)
@@ -1043,18 +1058,39 @@ def klasifikasi(df: pd.DataFrame, mode: str, fresh_max=FRESH_MAX_BAR,
                                  bool(r["rvol"] >= 1.5
                                       and r["above_vwap"])))
         if r["pola"] and any(k in r["pola"] for k in BULLISH_CANDLE):
-            # candle cuma "kuat" kalau ada konteks: trend naik + volume
-            kuat = bool(r["trend_up"] and r["rvol"] >= 1.2
-                        and r["di_atas_pivot"])
-            kandidat.append((r["pola"], 0, kuat and not ov))
+            # Candle BUKAN event mandiri lagi.
+            #
+            # Alasannya: "trend naik + volume + di atas pivot" itu KEADAAN
+            # yang bertahan berminggu-minggu di saham yang lagi naik. Pola
+            # bullish muncul tiap beberapa hari di dalam tren — jadi syarat
+            # lama bikin saham yang sama kepilih terus-terusan, cuma ganti
+            # nama pola. Persis keluhan "sinyal itu-itu aja": di layar
+            # nyata, 4 dari 6 kartu isinya pola candle.
+            #
+            # Buku 3.21 juga bilang sinyal single-stock kayak candle & MA
+            # cross itu lemah kalau berdiri sendiri. Sekarang candle cuma
+            # NAIKIN event lain jadi kuat, dia sendiri nggak pernah cukup.
+            kandidat.append((r["pola"], int(r["pola_umur"]), False))
         if not kandidat:
             return pd.Series({"event": "-", "bar_since": 999,
-                              "event_kuat": False, "fresh": False})
-        # prioritas: yang kuat dulu, lalu yang paling baru
-        kandidat.sort(key=lambda x: (not x[2], x[1]))
-        nama, umur, kuat = kandidat[0]
+                              "event_kuat": False, "fresh": False,
+                              "konfirmasi": ""})
+        # candle dipisah: dia penguat, bukan pemicu
+        candle = [k for k in kandidat
+                  if r["pola"] and k[0] == r["pola"]]
+        utama = [k for k in kandidat if k not in candle]
+        konfirmasi = candle[0][0] if candle else ""
+        if not utama:
+            # cuma ada pola candle -> dicatat, tapi nggak bikin BUY
+            return pd.Series({"event": konfirmasi or "-",
+                              "bar_since": int(candle[0][1]) if candle else 999,
+                              "event_kuat": False, "fresh": False,
+                              "konfirmasi": konfirmasi})
+        utama.sort(key=lambda x: (not x[2], x[1]))
+        nama, umur, kuat = utama[0]
         return pd.Series({"event": nama, "bar_since": int(umur),
-                          "event_kuat": bool(kuat), "fresh": bool(kuat)})
+                          "event_kuat": bool(kuat), "fresh": bool(kuat),
+                          "konfirmasi": konfirmasi})
 
     df = pd.concat([df, df.apply(event_row, axis=1)], axis=1)
 
@@ -1166,6 +1202,48 @@ def klasifikasi(df: pd.DataFrame, mode: str, fresh_max=FRESH_MAX_BAR,
             a.append(r["vol_regime"])
         return " · ".join(a) if a else "-"
     df["alasan"] = df.apply(alasan, axis=1)
+    return df
+
+
+def tandai_kebaruan(df, hari=5, path=JURNAL):
+    """Tandai sinyal yang BENERAN baru vs yang udah nongol hari-hari lalu.
+
+    Kenapa perlu: scanner ini nampilin KEADAAN saat ini. Kalau saham lagi
+    trending, dia bisa lolos semua gerbang beberapa hari berturut-turut —
+    dan di layar kelihatannya "sinyal itu-itu aja" padahal sistemnya
+    bekerja normal. Diukur di data simulasi bertren: **34% nama di daftar
+    BUY hari ini sama persis kayak kemarin.**
+
+    Bedanya sama cooldown Telegram: yang ini nggak nyembunyiin apa-apa,
+    cuma NGASIH LABEL, biar lo bisa milih mau lihat yang baru aja atau
+    semuanya. Sumbernya jurnal — nggak ada file state tambahan.
+    """
+    df = df.copy()
+    df["tayang_ke"] = 1
+    df["baru"] = True
+    if df.empty:
+        return df
+    try:
+        j = baca_jurnal(path)
+    except Exception:                                   # noqa: BLE001
+        j = None
+    if j is None or len(j) == 0 or "ticker" not in j.columns:
+        return df
+    try:
+        batas = (now_wib() - pd.Timedelta(days=hari)).strftime("%Y-%m-%d")
+        kolom_tgl = "data_date" if "data_date" in j.columns else "date"
+        if "iq_verdict" not in j.columns:
+            return df          # jurnal v3 lama nggak punya kolom ini
+        lalu = j[(j[kolom_tgl].astype(str) >= batas)
+                 & (j["iq_verdict"].astype(str) == "BUY")]
+        # dedup per (tanggal, ticker): satu hari = satu tayangan, walau
+        # scan-nya jalan 20x sehari
+        lalu = lalu.drop_duplicates(subset=[kolom_tgl, "ticker"])
+        hitung = lalu["ticker"].astype(str).value_counts()
+    except Exception:                                   # noqa: BLE001
+        return df
+    df["tayang_ke"] = df["ticker"].map(hitung).fillna(0).astype(int) + 1
+    df["baru"] = df["tayang_ke"] == 1
     return df
 
 
@@ -1344,6 +1422,7 @@ KOLOM_HASIL = [
     "proj_p25", "proj_p50", "proj_p75", "p_2x", "p_setengah",
     "f_mom", "f_resmom", "f_lowvol", "f_meanrev", "f_bandar",
     "f_close_str", "f_overnight",
+    "konfirmasi", "pola_umur", "baru", "tayang_ke",
     "gagal_syarat", "kurang", "kelly_%",
 ]
 
@@ -1474,8 +1553,11 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
                 df.loc[tkr, k] = v
 
     df = ukuran_kelly(df)
-    df = df.sort_values(["fresh", "iq_score", "mesin_score"],
-                        ascending=[False, False, False]).reset_index(drop=True)
+    df = tandai_kebaruan(df)
+    # urutan: yang BARU duluan, baru yang udah pernah nongol
+    df = df.sort_values(["fresh", "baru", "iq_score", "mesin_score"],
+                        ascending=[False, False, False, False]
+                        ).reset_index(drop=True)
     return df.reindex(columns=KOLOM_HASIL)
 
 
@@ -1859,7 +1941,12 @@ def pilih_untuk_kirim(df, top=8, cooldown_jam=COOLDOWN_JAM, path=TERKIRIM):
     kandidat = df[(df["iq_verdict"] == "BUY") & (df["bar_since"] <= FRESH_MAX_BAR)]
     pilih, baru_memori = [], dict(memori)
     for _, r in kandidat.iterrows():
-        kunci = f"{r['ticker']}|{r['event']}"
+        # Kunci cuma TICKER, bukan ticker+event.
+        # Dulu pakai "ticker|event": ICBP yang hari ini kirim
+        # "Bullish Engulfing" bisa kirim lagi besok sebagai
+        # "Bullish Harami" — kunci beda, cooldown-nya lolos, dan di
+        # Telegram tetap kelihatan saham yang sama berulang.
+        kunci = str(r["ticker"])
         prev = memori.get(kunci)
         if prev:
             try:
@@ -1870,7 +1957,8 @@ def pilih_untuk_kirim(df, top=8, cooldown_jam=COOLDOWN_JAM, path=TERKIRIM):
                 pass
         pilih.append(r)
         baru_memori[kunci] = {"ts": sekarang.isoformat(),
-                              "iq": float(r["iq_score"])}
+                              "iq": float(r["iq_score"]),
+                              "event": str(r["event"])}
         if len(pilih) >= top:
             break
     # buang memori yang lebih tua dari 7 hari biar file nggak numpuk

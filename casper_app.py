@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.2.2
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.3
 ============================================================================
 Jalankan:  streamlit run casper_app.py
 Butuh:     pip install streamlit yfinance pandas numpy pytz
@@ -39,12 +39,14 @@ _WAJIB = ["VERSI", "DataKosong", "LAST_TELE", "FAKTOR", "COOLDOWN_JAM",
           "pilih_untuk_kirim", "porsi_sesi",
           # v4.1+
           "FAKTOR_BSJP", "pasang_bandar", "proyeksi_bagger",
-          "jalankan_eod", "kirim_tele_eod"]
+          "jalankan_eod", "kirim_tele_eod",
+          # v4.3
+          "tandai_kebaruan"]
 _hilang = [a for a in _WAJIB if not hasattr(ce, a)]
 if _hilang:
     st.error(
         "### ⚠️ Versi engine nggak cocok\n\n"
-        f"`casper_app.py` ini versi **4.2.2**, tapi `casper_engine.py` yang "
+        f"`casper_app.py` ini versi **4.3**, tapi `casper_engine.py` yang "
         f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
         f"kurang: `{'`, `'.join(_hilang[:5])}`"
         + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
@@ -53,9 +55,9 @@ if _hilang:
         "sama-sama versi terbaru dan ada di folder yang sama.\n\n"
         "Cek dari mesin lo:\n"
         "```bash\n"
-        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.2.2\"\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.3\"\n"
         "git add casper_engine.py casper_app.py casper_arjum.py\n"
-        "git commit -m 'Casper v4.2.2'\n"
+        "git commit -m 'Casper v4.3'\n"
         "git push\n"
         "```\n"
         "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "
@@ -457,7 +459,26 @@ with tab1:
                        "nutup, dan lihat daftar NYARIS di bawah.")
 
         if not buy.empty:
-            st.markdown("#### 🎯 SINYAL BARU")
+            n_baru = int(buy["baru"].sum())
+            c1, c2 = st.columns([3, 2])
+            with c1:
+                st.markdown("#### 🎯 SINYAL")
+            with c2:
+                cuma_baru = st.toggle(
+                    f"Cuma yang belum pernah nongol ({n_baru} dari "
+                    f"{len(buy)})", value=True, key="cuma_baru",
+                    help="Scanner ini nampilin KEADAAN sekarang. Saham yang "
+                         "lagi trending bisa lolos semua gerbang beberapa "
+                         "hari berturut-turut — di layar kelihatannya "
+                         "'itu-itu aja' padahal sistemnya normal. Toggle "
+                         "ini nyaring yang udah pernah muncul sebagai BUY "
+                         "dalam 5 hari terakhir (sumbernya jurnal).")
+            if cuma_baru:
+                buy = buy[buy["baru"]]
+                if buy.empty:
+                    st.info("🔁 Semua sinyal hari ini **udah pernah nongol** "
+                            "beberapa hari terakhir — nggak ada yang baru. "
+                            "Matiin toggle di atas buat lihat semuanya.")
             kartu = ""
             for _, r in buy.head(10).iterrows():
                 g = str(r["mesin_grade"])
@@ -465,6 +486,11 @@ with tab1:
                          "c-hijau" if ("PRESISI" in g or "LAYAK" in g) else
                          "c-merah" if "WAIT" in g else "c-abu")
                 rr = f"{r['rr']:.2f}" if np.isfinite(r["rr"]) else "-"
+                lencana = ("" if r.get("baru", True)
+                           else f" · <span style='color:#7a9a6a'>tayang "
+                                f"ke-{int(r.get('tayang_ke', 1))}</span>")
+                if r.get("konfirmasi"):
+                    lencana += f" · 🕯️ {r['konfirmasi']}"
                 # baris ekstra sesuai horizon modenya
                 ekstra = ""
                 if np.isfinite(pd.to_numeric(r.get("ov_menang_pct"),
@@ -490,7 +516,7 @@ with tab1:
   <span class="ms">{r['iq_score']:.0f}</span>
   <div class="tkr">{r['ticker']}</div>
   <div class="hrg">Rp{r['price']:,.0f} · ATR {r['atr_pct']}%</div>
-  <div class="ev">⚡ {r['event']} · {int(r['bar_since'])} bar lalu</div>
+  <div class="ev">⚡ {r['event']} · {int(r['bar_since'])} bar lalu{lencana}</div>
   <span class="chip {warna}">{g}</span>
   <span class="chip c-hijau">{r['signal']}</span>
   <div class="tpsl">🎯 TP <b class="tp">{r['tp']:,.0f}</b>
@@ -509,6 +535,7 @@ with tab1:
             st.markdown("#### 🟡 NYARIS — gagal cuma di satu syarat")
             st.dataframe(
                 nyaris[["ticker", "iq_score", "event", "bar_since", "kurang",
+                        "baru", "tayang_ke",
                         "price", "tp", "sl", "rr", "risiko_pct", "rvol",
                         "rsi_ema", "pola", "fase"]],
                 **lebar("dataframe"), hide_index=True, height=240)

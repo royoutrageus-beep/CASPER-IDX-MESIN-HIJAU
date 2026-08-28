@@ -554,3 +554,94 @@ venv-lama/bin/pip install "streamlit==1.40.0" pandas numpy pytz
 Pelajarannya: **tes yang cuma jalan di satu environment nggak ngebuktiin
 kompatibilitas.** Bug ini nggak keliatan di container, dan cuma muncul di laptop
 lo — persis lubang yang ditinggalin sama nguji cuma di satu tempat.
+
+---
+---
+
+# v4.2.2 → v4.3 — "sinyal itu-itu aja", ronde dua
+
+Kali ini gue **ukur dulu** sebelum ngoprek. Dari screenshot: **4 dari 6 kartu
+isinya pola candle** (Harami, Engulfing ×2, Piercing Line). Itu petunjuknya.
+
+## 🔴 Temuan utama: pola candle dideteksi di bar yang BELUM TUTUP
+
+Kalau bar hari ini masih jalan, range High–Low belum penuh. Body candle jadi
+kelihatan mendominasi range — dan pola macam Marubozu / Engulfing / Harami
+kepicu jauh lebih sering daripada di bar yang udah final.
+
+Diukur di 150 saham simulasi:
+
+| Kondisi bar | % saham kena pola bullish | pola terbanyak |
+|---|---|---|
+| bar **TUTUP** (range 100%) | **1.3%** | Doji |
+| ~jam 13 (range 60%) | 2.0% | Doji |
+| ~jam 10 (range 35%) | **5.3%** | Marubozu |
+| ~jam 09:15 (range 20%) | **16.0%** | Marubozu |
+
+**Dua belas kali lipat**, dan semuanya palsu. Engine udah tau bar-nya partial
+(kolom `bar`), tapi `deteksi_candle` tetap dijalanin di bar itu. Sekarang: kalau
+bar hari ini masih jalan, yang dibaca **bar kemarin** yang udah final, dan
+umurnya dicatat 1 bar — bukan 0.
+
+## 🔴 Temuan kedua: candle itu KEADAAN yang nyamar jadi KEJADIAN
+
+Syarat lama biar pola candle dianggap event kuat: `trend_up` + `rvol ≥ 1.2` +
+`di_atas_pivot`. Ketiganya **bertahan berminggu-minggu** di saham yang lagi naik,
+dan pola bullish muncul tiap beberapa hari di dalam tren. Jadi saham yang sama
+kepilih terus, cuma ganti nama pola.
+
+Ini sebenernya bug yang **sama persis** kayak v3.1 dulu — "keadaan, bukan
+kejadian" — cuma pindah tempat. Gue kelewat pas v4.0.
+
+Sekarang candle **nggak pernah jadi pemicu**. Dia jadi kolom `konfirmasi` yang
+nempel di event utama (BREAKOUT / GOLDEN CROSS / RECLAIM PIVOT). Buku 3.21 juga
+bilang persis itu: sinyal single-stock kayak candle & MA cross lemah kalau
+berdiri sendiri.
+
+Hasil di data bertren, 25 hari: candle turun dari **4.9% → 0%** sebagai pemicu
+BUY. Sisanya BREAKOUT 51%, RECLAIM PIVOT 36%, GOLDEN CROSS 13%.
+
+## Temuan ketiga: 33% daftar BUY emang sama kayak kemarin — dan itu WAJAR
+
+Gue bikin data simulasi yang punya **tren bertahan** (drift AR(1) ρ=0.98 +
+volatility clustering), soalnya random walk biasa nggak bisa reproduksi keluhan
+lo sama sekali (perputarannya 100%).
+
+Hasilnya: **34% nama di daftar BUY hari ini sama kayak kemarin.** Penyebabnya
+bukan bug — `fresh_max=3` artinya satu breakout tetap sah 4 hari berturut-turut.
+Itu memang disengaja: biar lo nggak kelewatan sinyal kalau sehari nggak buka app.
+
+Tapi di layar, efeknya persis kayak rusak.
+
+**Fix-nya bukan nyembunyiin, tapi NGASIH LABEL.** Kolom baru `baru` dan
+`tayang_ke`, dihitung dari **jurnal** (bukan file state baru):
+
+- toggle **"Cuma yang belum pernah nongol"** — nyala secara default
+- yang berulang dikasih badge `tayang ke-3`
+- urutan kartu: yang baru duluan
+
+Jadi lo bisa lihat sendiri bedanya "sistem macet" vs "saham ini emang masih
+bagus dari kemarin".
+
+## Temuan keempat: cooldown Telegram bocor
+
+Kuncinya `ticker|event`. ICBP yang hari ini kirim "Bullish Engulfing" bisa kirim
+lagi besok sebagai "Bullish Harami" — kunci beda, cooldown lolos. Sekarang
+kuncinya **ticker doang**.
+
+## Temuan kelima: `konsentrasi_top5` di layar mustahil
+
+Di screenshot: **ICBP top5 97%**. Buat saham selikuid ICBP itu nggak masuk akal.
+Sebabnya `broker_limit=30` — jadi yang dihitung "top5 dari 30 broker teratas",
+bukan dari seluruh broker, dan angkanya otomatis mepet 100% buat semua saham.
+Sekarang request pakai `all_data=true` (parameter itu emang ada di API lo),
+`broker_limit` dinaikin ke 200.
+
+## Yang berubah di tes
+
+`uji_app.py` nyari widget lewat **label**, bukan indeks. Waktu gue nambah toggle
+baru, indeksnya geser dan tes mode BSJP/Intraday/Bagger **diam-diam ke-skip** —
+nggak error, cuma nggak nguji apa-apa. Itu lebih bahaya daripada gagal. Sekarang
+kalau label nggak ketemu, tesnya langsung merah.
+
+Sekarang 8 skenario, lolos di Streamlit 1.40 **dan** 1.61.
