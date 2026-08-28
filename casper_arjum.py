@@ -57,6 +57,14 @@ import pandas as pd
 
 KONFIG = "arjum_config.json"
 CACHE_DIR = "cache_arjum"
+# Paket FREE Arjum = 1.000 request/hari, reset 00:00 WIB. Gampang banget
+# kehabisan: satu scan bandarmologi 40 kandidat + net asing = 80 request,
+# dan kalau /history dipakai buat OHLCV seluruh universe itu ~700 request
+# SEKALI SCAN — habis dalam sekali jalan. (Kejadian beneran: kuota ludes,
+# 2.332 request sebulan.) Makanya sekarang ada penjaga keras.
+KUOTA_HARIAN = 1000
+CADANGAN_KUOTA = 100        # sisain buat cek manual / diagnosa
+FILE_KUOTA = "cache_arjum/_kuota.json"
 TIMEOUT = 30
 RETRY = 3
 WORKER = 6            # request paralel; naikin kalau paket lo longgar
@@ -179,6 +187,44 @@ def _path_cache(nama, kunci):
     return os.path.join(CACHE_DIR, f"{nama}_{aman}.json")
 
 
+def _tgl_kuota() -> str:
+    """Tanggal WIB — kuota Arjum reset 00:00 WIB, bukan UTC."""
+    import datetime as _dt
+    return (_dt.datetime.now(_dt.timezone.utc)
+            + _dt.timedelta(hours=7)).strftime("%Y-%m-%d")
+
+
+def baca_kuota() -> dict:
+    hari = _tgl_kuota()
+    try:
+        d = json.load(open(FILE_KUOTA, encoding="utf-8"))
+        if d.get("tanggal") == hari:
+            return d
+    except Exception:                                   # noqa: BLE001
+        pass
+    return {"tanggal": hari, "terpakai": 0}
+
+
+def sisa_kuota(batas=None) -> int:
+    batas = batas if batas is not None else (KUOTA_HARIAN - CADANGAN_KUOTA)
+    return max(batas - baca_kuota()["terpakai"], 0)
+
+
+def _catat_kuota(n=1):
+    d = baca_kuota()
+    d["terpakai"] += n
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        json.dump(d, open(FILE_KUOTA, "w", encoding="utf-8"))
+    except Exception:                                   # noqa: BLE001
+        pass
+    return d["terpakai"]
+
+
+class KuotaHabis(RuntimeError):
+    pass
+
+
 def _panggil(endpoint, code=None, params=None, cfg=None, pakai_cache=True):
     cfg = cfg or muat_konfig()
     key = ambil_key()
@@ -236,6 +282,17 @@ def _panggil(endpoint, code=None, params=None, cfg=None, pakai_cache=True):
     url = cfg["base_url"].rstrip("/") + path
     if params:
         url += "?" + urllib.parse.urlencode(params)
+
+    # Cache nggak dihitung — yang dihitung cuma request yang beneran
+    # nembak jaringan.
+    if sisa_kuota() <= 0:
+        d = baca_kuota()
+        raise KuotaHabis(
+            f"Kuota Arjum hari ini habis ({d['terpakai']} request terpakai, "
+            f"batas aman {KUOTA_HARIAN - CADANGAN_KUOTA} dari "
+            f"{KUOTA_HARIAN} paket FREE). Reset 00:00 WIB.\n"
+            "Casper otomatis turun ke proksi OHLCV — scan tetap jalan.")
+    _catat_kuota()
 
     galat = None
     for percobaan in range(RETRY):
@@ -676,6 +733,10 @@ if __name__ == "__main__":
         ada = tersedia()
         print("API key ketemu:", "YA ✅" if ada else "BELUM ❌")
         print("base_url     :", muat_konfig()["base_url"])
+        d = baca_kuota()
+        print(f"kuota hari ini: {d['terpakai']} terpakai · sisa aman "
+              f"{sisa_kuota()} (paket FREE {KUOTA_HARIAN}/hari, reset "
+              "00:00 WIB)")
         print("config file  :",
               f"{KONFIG} (ada)" if os.path.exists(KONFIG)
               else f"{KONFIG} (belum ada)")

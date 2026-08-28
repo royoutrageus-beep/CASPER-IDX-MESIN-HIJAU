@@ -880,3 +880,78 @@ soalnya dia bukan turunan `Exception` dan lolos dari `except Exception`.
 Diuji dengan getpass yang sengaja dibikin ngelempar `KeyboardInterrupt` persis
 kayak di mesin lo: fallback jalan, key kesimpan, health check lolos, diagnosa
 `/history` keluar lengkap.
+
+---
+---
+
+# v4.4.3 → v4.5 — Arjum dicabut dari jalur OHLCV, Yahoo jadi utama lagi
+
+## Gue salah hitung, dan kuota lo yang jadi korban
+
+Dashboard lo: **paket FREE, 1.000 request/hari, sisa 0.** Sebulan 2.332 request.
+
+Desain v4.4 naruh Arjum `/api/history` sebagai sumber OHLCV utama. Tapi
+`/history/{code}` itu **satu request PER SAHAM** — buat universe ~700 ticker itu
+**700 request sekali scan**. Kuota sehari habis dalam satu kali jalan. Dan yang
+lebih parah: bandarmologi jadi ikut mati, karena kuotanya udah kebakar duluan
+sama data harga yang **Yahoo kasih gratis**.
+
+Gue udah nulis sendiri di v4.2 bahwa `code` itu path parameter dan 700 ticker =
+700 request — terus tetap aja naruh dia sebagai sumber utama OHLCV. Itu
+kesalahan aritmetika yang harusnya ketahuan sebelum dikirim.
+
+## Yang berubah
+
+**Default `sumber` sekarang `"yahoo"`, bukan `"auto"`.** Arjum nggak pernah
+kesentuh buat OHLCV kecuali lo minta eksplisit — dan kalaupun `auto` dipilih,
+dia cuma dipakai kalau universe-nya **≤ 50 ticker** dan sisa kuotanya cukup.
+
+**Bandarmologi Arjum MATI secara default.** Toggle di sidebar, plus slider
+"berapa kandidat ditembak". Alasannya sama: ~25 request per scan × auto-scan
+tiap 15 menit = kuota habis sebelum siang. Nyalain buat scan EOD sekali sehari
+aja.
+
+**Penjaga kuota keras.** `casper_arjum` sekarang ngitung request per hari
+(reset 00:00 WIB, sesuai dashboard) dan **nolak nembak jaringan** kalau udah
+lewat batas aman (900 dari 1.000, sisain 100 buat diagnosa manual). Response
+dari cache nggak dihitung. Sisa kuota kelihatan di sidebar dan di
+`python casper_arjum.py`.
+
+## Karena Yahoo jadi tumpuan, dia dibikin JAUH lebih jarang dipanggil
+
+Ini yang harusnya gue kerjain dari awal, bukan cari sumber lain:
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Auto-scan tiap 15 menit | tarik ulang **seluruh** universe, `period=2y`, tiap siklus | ticker yang cache-nya udah punya bar terbaru **nggak ditembak sama sekali** |
+| Cache ketinggalan 2-3 hari | `period=2y` | `period=1mo` — payload jauh lebih kecil |
+| Ticker baru | `period=2y` | `period=2y` (emang perlu) |
+
+Diuji lima skenario:
+
+| Skenario | Hasil |
+|---|---|
+| Scan pertama, cache kosong | `Yahoo-penuh (60)`, 1× request `2y` |
+| Scan ulang 15 menit kemudian | **NOL request ke Yahoo**, 60 ticker dilewati |
+| Cache ketinggalan 3 hari | request `period=1mo`, bukan `2y` |
+| Yahoo diblokir total | `CACHE DISK (60)` — scan tetap jalan |
+| Kuota Arjum 950/900 | `KuotaHabis` — **nggak nembak jaringan sama sekali** |
+
+Buat trader harian yang buka app dari jam 9 sampai 4, ini beda antara ~2.000
+request/hari ke Yahoo dan **~30**. Itu penyebab utama kenapa IP lo kena saring.
+
+## Bonus: peringatan palsu dihilangkan
+
+Waktu semua ticker cache-nya segar, laporannya sempat bilang `CACHE DISK` —
+dan UI munculin banner merah "semua sumber online gagal" padahal nggak ada yang
+rusak. **Peringatan yang sering salah bakal diabaikan pas dia beneran penting.**
+
+Sekarang dibedain: `cache segar (60)` = sehat, nol request, nggak ada banner.
+`CACHE DISK (60)` + flag `gagal_online` = Yahoo beneran gagal, banner merah
+muncul. UI ngecek flag-nya, bukan nebak dari teks.
+
+## Arjum masih berguna — cuma bukan buat ini
+
+Broker summary tetap jalan dan tetap jadi satu-satunya sumber bandarmologi asli.
+~25 request per scan EOD = ~500/bulan, muat banget di paket FREE. Yang salah
+cuma naruh dia di jalur yang butuh 700 request sekali jalan.

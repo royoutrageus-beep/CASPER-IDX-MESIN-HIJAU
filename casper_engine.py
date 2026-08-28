@@ -78,7 +78,7 @@ import numpy as np
 import pandas as pd
 import pytz
 
-VERSI = "4.4.3"
+VERSI = "4.5"
 TZ_WIB = pytz.timezone("Asia/Jakarta")
 
 
@@ -283,7 +283,7 @@ class DataKosong(RuntimeError):
     """
 
 
-def unduh_ohlcv(tickers, periode=PERIODE, sumber="auto"):
+def unduh_ohlcv(tickers, periode=PERIODE, sumber="yahoo"):
     """Ambil OHLCV lewat casper_data (Arjum -> Yahoo -> cache disk).
 
     v4.3 ke bawah nembak Yahoo langsung, batch 50, tanpa cache. Sekali
@@ -312,6 +312,8 @@ def unduh_ohlcv(tickers, periode=PERIODE, sumber="auto"):
     LAST_META["sumber_data"] = " + ".join(lap["sumber"]) or "-"
     LAST_META["n_gagal_data"] = len(lap.get("gagal", []))
     LAST_META["cache_umur_hari"] = lap.get("cache_umur_hari", float("nan"))
+    LAST_META["gagal_online"] = bool(lap.get("gagal_online"))
+    LAST_META["hemat"] = lap.get("hemat", 0)
     print(f"[i] Sumber data: {LAST_META['sumber_data']} — "
           f"{lap['n_dapat']}/{lap['n_minta']} ticker")
     return data
@@ -799,7 +801,7 @@ def hari_bursa_terakhir(sampai, n=5):
 
 
 def pasang_bandar(df, data, bandar=None, hari_bandar=5, tgl_bar=None,
-                  bandar_top=40, asing=True, bobot=None):
+                  bandar_top=40, asing=False, bobot=None):
     """Tempelin fitur bandarmologi + kolom `f_bandar` ke hasil scan.
 
     SCAN DUA TAHAP — ini yang bikin dia nggak kena rate limit:
@@ -1436,8 +1438,8 @@ KOLOM_HASIL = [
 def scan(tickers=None, demo=False, semua=False, mode="Swing",
          min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA,
          fresh_max=FRESH_MAX_BAR, min_iq=70.0, max_risiko=8.0, min_rr=1.5,
-         bandar=None, hari_bandar=5, proyeksi_top=40,
-         bandar_top=40, bandar_asing=True, sumber="auto"):
+         bandar=None, hari_bandar=5, proyeksi_top=40, bandar_asing=False,
+         bandar_top=25, sumber="yahoo"):
     global LAST_CLOSE, LAST_META
     LAST_META = {}
     if tickers is None:
@@ -2051,7 +2053,7 @@ def kirim_tele(df, top=8, conf=CONF_TELE, paksa=False, diam_kalau_kosong=True):
 def jalankan_eod(semua=True, tickers=None, demo=False, top=6,
                  mode_list=("BSJP", "Swing", "Bagger"), tele=True,
                  min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA,
-                 sumber="auto"):
+                 sumber="yahoo"):
     """SCAN EOD — satu jalur buat aksi besok pagi.
 
     Tiga horizon sekaligus, karena keputusannya emang beda-beda:
@@ -2191,9 +2193,9 @@ def main():
     ap.add_argument("--min-turnover", type=int, default=MIN_TURNOVER_JT)
     ap.add_argument("--min-harga", type=int, default=MIN_HARGA)
     ap.add_argument("--fresh", type=int, default=FRESH_MAX_BAR)
-    ap.add_argument("--sumber", default="auto",
+    ap.add_argument("--sumber", default="yahoo",
                     choices=["auto", "arjum", "yahoo", "cache"],
-                    help="sumber OHLCV; auto = Arjum -> Yahoo -> cache disk")
+                    help="sumber OHLCV. yahoo (default, hemat kuota Arjum) | auto | arjum (BOROS: 1 request/saham) | cache")
     ap.add_argument("--eod", action="store_true",
                     help="scan EOD 3 horizon (BSJP/Swing/Bagger) + kirim "
                          "rencana besok ke Telegram")

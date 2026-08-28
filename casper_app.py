@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.4.3
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.5
 ============================================================================
 Jalankan:  streamlit run casper_app.py
 Butuh:     pip install streamlit yfinance pandas numpy pytz
@@ -47,7 +47,7 @@ _hilang = [a for a in _WAJIB if not hasattr(ce, a)]
 if _hilang:
     st.error(
         "### ⚠️ Versi engine nggak cocok\n\n"
-        f"`casper_app.py` ini versi **4.4.3**, tapi `casper_engine.py` yang "
+        f"`casper_app.py` ini versi **4.5**, tapi `casper_engine.py` yang "
         f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
         f"kurang: `{'`, `'.join(_hilang[:5])}`"
         + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
@@ -56,9 +56,9 @@ if _hilang:
         "sama-sama versi terbaru dan ada di folder yang sama.\n\n"
         "Cek dari mesin lo:\n"
         "```bash\n"
-        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.4.3\"\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.5\"\n"
         "git add casper_*.py requirements.txt .gitignore\n"
-        "git commit -m 'Casper v4.4.3'\n"
+        "git commit -m 'Casper v4.5'\n"
         "git push\n"
         "```\n"
         "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "
@@ -215,12 +215,13 @@ with st.sidebar:
     st.markdown("### ⚙️ SCANNER SETTINGS")
     sumber = st.radio("Sumber data", ["Live", "Demo (simulasi)"])
     sumber_ohlcv = st.selectbox(
-        "Asal OHLCV", ["auto", "arjum", "yahoo", "cache"],
+        "Asal OHLCV", ["yahoo", "auto", "arjum", "cache"],
         disabled=sumber.startswith("Demo"),
-        help="auto = Arjum dulu, kalau gagal Yahoo, kalau dua-duanya "
-             "gagal pakai cache disk. Yahoo makin sering nolak IP "
-             "datacenter (Streamlit Cloud & GitHub Actions), jadi "
-             "'auto' yang paling aman.")
+        help="yahoo (default) = Yahoo + cache disk. JANGAN pilih 'arjum' "
+             "buat universe besar: /history itu 1 request PER SAHAM, "
+             "sementara paket FREE cuma 1.000/hari — sekali scan ~700 "
+             "ticker langsung ngabisin kuota sehari, dan bandarmologi "
+             "ikut mati.")
     universe = st.radio("Cakupan", ["Semua IDX (~700)", "Custom"])
     custom = st.text_area("Ticker custom (tanpa .JK juga boleh)",
                           "BBCA BBRI TLKM", disabled=universe != "Custom")
@@ -281,8 +282,25 @@ with st.sidebar:
     try:
         import casper_arjum as ar
         if ar.tersedia():
-            st.caption("✅ API key Arjum ketemu — broker summary asli")
-            hari_bandar = st.slider("Akumulasi berapa hari bursa", 1, 20, 5)
+            _sisa = ar.sisa_kuota()
+            st.caption(f"✅ Key Arjum ketemu · sisa kuota aman hari ini: "
+                       f"**{_sisa}** req (paket FREE {ar.KUOTA_HARIAN}/hari, "
+                       "reset 00:00 WIB)")
+            pakai_bandar = st.toggle(
+                "Pakai broker summary Arjum", value=False,
+                help="MATI secara default. Tiap scan makan ~1 request per "
+                     "kandidat. Kalau auto-scan tiap 15 menit, kuota "
+                     "harian habis sebelum siang. Nyalain buat scan EOD "
+                     "sekali sehari aja.")
+            bandar_top = st.slider("Berapa kandidat ditembak ke Arjum",
+                                   5, 60, 25, step=5,
+                                   disabled=not pakai_bandar)
+            hari_bandar = st.slider("Akumulasi berapa hari bursa", 1, 20, 5,
+                                    disabled=not pakai_bandar)
+            if pakai_bandar and bandar_top > _sisa:
+                st.warning(f"⚠️ Butuh ~{bandar_top} req, sisa cuma {_sisa}.")
+            if not pakai_bandar:
+                bandar_top = 0
             bandar_top = st.slider(
                 "Berapa kandidat teratas yang ditembak ke Arjum", 10, 150, 40,
                 step=10,
@@ -296,10 +314,10 @@ with st.sidebar:
                        "(CMF + A/D). Itu nebak tekanan beli dari harga & "
                        "volume, BUKAN data broker.")
             st.code("python casper_arjum.py --set-key", language="bash")
-            hari_bandar, bandar_top = 5, 40
+            hari_bandar, bandar_top = 5, 0
     except Exception:                                   # noqa: BLE001
         st.caption("❌ casper_arjum.py nggak ketemu")
-        hari_bandar, bandar_top = 5, 40
+        hari_bandar, bandar_top = 5, 0
 
     st.markdown("### 📨 TELEGRAM")
     ada = ce.ambil_config_tele() is not None
@@ -410,17 +428,18 @@ if "last_scan" in st.session_state:
         f"🕒 Scan terakhir {st.session_state['last_scan']:%H:%M:%S} WIB · "
         f"📅 bar data **{meta.get('data_date', '?')}** "
         f"({meta.get('bar', '?')}) · 🔌 {meta.get('sumber_data', '?')}"
-        + (f" · {meta['n_gagal_data']} ticker gagal diambil"
-           if meta.get("n_gagal_data") else "")
+        + (f" · {meta['n_gagal_data']} gagal" if meta.get("n_gagal_data") else "")
+        + (f" · {meta['hemat']} dilewati (cache segar)"
+           if meta.get("hemat") else "")
         + (f" · 🔄 Auto tiap {interval}" if auto_on else " · Auto OFF"))
-if "CACHE DISK" in str(meta.get("sumber_data", "")):
+if meta.get("gagal_online"):
     _umur = meta.get("cache_umur_hari")
     st.markdown(
         '<div class="barwarn">🛑 <b>Semua sumber online gagal</b> — '
         'scan ini jalan pakai <b>cache disk</b>'
         + (f' (umur {_umur:.0f} hari)' if _umur == _umur else '')
         + '. Sinyalnya berdasar data lama, jangan dipakai buat entry. '
-        'Yahoo lagi nolak, dan Arjum belum kesetel / ikut gagal.</div>',
+        'Yahoo lagi nolak. Scan berikutnya bakal nyoba lagi.</div>',
         unsafe_allow_html=True)
 if str(meta.get("bar", "")).startswith("BASI"):
     st.markdown(

@@ -18,19 +18,33 @@ Tiga hal yang bikin makin parah di setup lo:
   3. Sekali diblokir, SEMUA saham hilang sekaligus, dan scan-nya balik
      kosong — bukan cuma sebagian.
 
-Jadi strateginya bukan "bikin Yahoo mau", tapi:
+Jadi strateginya bukan "bikin Yahoo mau", tapi bikin dia JARANG dipanggil:
 
-  SUMBER 1  Arjum /api/history/{code}   <- lo udah bayar ini, data resmi IDX
-  SUMBER 2  Yahoo Finance                <- cadangan
-  SUMBER 3  CACHE DISK                   <- jaring pengaman terakhir
+  SUMBER 1  Yahoo Finance   <- tetap sumber utama; gratis, cakupannya penuh
+  SUMBER 2  CACHE DISK      <- jaring pengaman + pengurang beban
 
-CACHE-nya yang paling penting dan bisa dipakai HARI INI, tanpa nunggu
-skema Arjum: tiap bar harian yang berhasil diambil disimpan ke
-`cache_ohlcv/`. Kalau besok Yahoo ngeblok, scan tetap jalan pakai data
-kemarin — dan dikasih label BASI dengan jelas, bukan diam-diam.
+ARJUM SENGAJA TIDAK DIPAKAI BUAT OHLCV.
+Paket FREE-nya 1.000 request/hari, sementara `/history/{code}` itu satu
+request PER SAHAM — sekali scan ~700 ticker langsung ngabisin kuota
+sehari. Kejadian beneran: kuota ludes, dan bandarmologi ikut mati karena
+kuotanya kepakai duluan sama OHLCV. Arjum jauh lebih berharga dipakai
+buat broker summary (~80 request/hari) daripada dibakar buat data harga
+yang Yahoo kasih gratis.
 
-Itu beda besar sama v4.3: dulu Yahoo diblokir = `DataKosong` = nol sinyal
-= lo nggak bisa bedain "pasar sepi" dari "datanya nggak kebaca".
+DUA HAL YANG BIKIN YAHOO JAUH LEBIH JARANG KENA BLOKIR:
+
+  1. INKREMENTAL. Kalau cache udah punya riwayat panjang, yang diminta
+     cuma beberapa bar terakhir (`period=1mo`), bukan 2 tahun penuh.
+     Payload-nya jauh lebih kecil dan jarang timeout.
+  2. LEWATI YANG UDAH SEGAR. Auto-scan tiap 15 menit dulu narik ulang
+     SELURUH universe tiap siklus. Buat data HARIAN itu sia-sia — bar
+     hari ini nggak berubah tiap 15 menit. Sekarang ticker yang cache-nya
+     udah punya bar terbaru dilewati.
+
+CACHE-nya juga jaring pengaman: kalau Yahoo ngeblok, scan tetap jalan
+pakai data kemarin — dan dikasih label BASI dengan jelas, bukan
+diam-diam. Itu beda besar sama v4.3: dulu Yahoo diblokir = nol sinyal =
+lo nggak bisa bedain "pasar sepi" dari "datanya nggak kebaca".
 """
 
 from __future__ import annotations
@@ -120,11 +134,46 @@ def umur_cache_hari(tickers) -> float:
     return (pd.Timestamp.today().normalize() - max(tgl)).days
 
 
+def status_cache(tickers, min_bar=200, segar_hari=1):
+    """Bagi ticker jadi tiga: udah segar / tinggal ditambal / harus penuh.
+
+    Ini inti penghematan request. Data HARIAN nggak berubah tiap 15 menit,
+    jadi narik ulang 2 tahun penuh tiap siklus auto-scan itu murni bakar
+    kuota dan reputasi IP.
+    """
+    segar, tambal, penuh = [], [], []
+    batas = pd.Timestamp.today().normalize() - pd.Timedelta(days=segar_hari)
+    for t in tickers:
+        f = _file_cache(t)
+        if not os.path.exists(f):
+            penuh.append(t)
+            continue
+        try:
+            df = pd.read_csv(f, index_col=0, parse_dates=True)
+        except Exception:                               # noqa: BLE001
+            penuh.append(t)
+            continue
+        if len(df) < min_bar:
+            penuh.append(t)
+        elif len(df) and pd.Timestamp(df.index[-1]).normalize() >= batas:
+            segar.append(t)
+        else:
+            tambal.append(t)
+    return segar, tambal, penuh
+
+
 # ════════════════════════════════════════════════════════════════════════
-#  SUMBER 1 — ARJUM /api/history/{code}
+#  ARJUM /api/history — ADA tapi TIDAK dipakai default (boros kuota)
 # ════════════════════════════════════════════════════════════════════════
 def dari_arjum(tickers, hari=520, worker=6, diam=False):
-    """OHLCV dari Arjum. Skema-nya DIDETEKSI, bukan diasumsikan.
+    """OHLCV dari Arjum. HATI-HATI: BOROS KUOTA.
+
+    Satu request per saham. Buat universe ~700 ticker itu 700 request —
+    sementara paket FREE cuma 1.000/hari. Cuma masuk akal buat watchlist
+    kecil (< 50 saham). Nggak pernah dipanggil kalau `sumber="yahoo"`
+    (default).
+
+    Skema-nya DIDETEKSI, bukan diasumsikan.
 
     Gue belum punya contoh response `/api/history/{code}`, jadi field-nya
     dicocokin lewat daftar alias (sama polanya kayak broker-summary yang
@@ -270,65 +319,135 @@ class SemuaSumberGagal(RuntimeError):
     pass
 
 
-def ambil_ohlcv(tickers, periode="2y", sumber="auto", min_bar=200,
-                pakai_cache=True, diam=False):
-    """Ambil OHLCV dari sumber terbaik yang tersedia.
+def ambil_ohlcv(tickers, periode="2y", sumber="yahoo", min_bar=200,
+                pakai_cache=True, diam=False, segar_hari=1):
+    """Ambil OHLCV se-hemat mungkin.
 
-    sumber: "auto" (Arjum -> Yahoo -> cache) | "arjum" | "yahoo" | "cache"
+    sumber: "yahoo" (default) | "auto" | "arjum" | "cache"
 
-    Balikin (data, laporan). `laporan` selalu nyebutin dari mana tiap
-    bagian datang dan berapa yang gagal — supaya "nol sinyal" nggak pernah
-    lagi ambigu antara 'pasar sepi' dan 'datanya nggak kebaca'.
+    Alurnya buat "yahoo"/"auto":
+      1. Ticker yang cache-nya UDAH punya bar terbaru  -> nggak ditembak
+         sama sekali
+      2. Ticker yang cache-nya ketinggalan beberapa hari -> minta 1 bulan
+         terakhir aja (payload kecil)
+      3. Ticker baru / riwayat kurang                  -> minta penuh
+      4. Kalau semuanya gagal                          -> cache disk,
+         dilabeli BASI
+
+    Balikin (data, laporan). `laporan` selalu nyebutin asal tiap bagian —
+    supaya "nol sinyal" nggak pernah lagi ambigu antara 'pasar sepi' dan
+    'datanya nggak kebaca'.
     """
     tickers = list(tickers)
     laporan = {"sumber": [], "gagal": [], "n_minta": len(tickers),
-               "cache_umur_hari": np.nan}
-    data = None
+               "cache_umur_hari": np.nan, "hemat": 0,
+               "gagal_online": False}
+    bagian = []
 
-    if sumber in ("auto", "arjum"):
-        d, gagal = dari_arjum(tickers, diam=diam)
-        if d is not None:
-            data = d
-            laporan["sumber"].append(f"Arjum ({len(d['Close'].columns)})")
-            tickers_sisa = gagal
-        else:
-            tickers_sisa = tickers
-        if sumber == "arjum":
-            tickers_sisa = []
-    else:
-        tickers_sisa = tickers
+    if sumber == "cache":
+        d0, _ = muat_cache(tickers, min_bar=min_bar)
+        if d0 is None:
+            raise SemuaSumberGagal("Cache disk kosong.")
+        laporan["sumber"].append(f"CACHE DISK ({d0['Close'].shape[1]})")
+        laporan["cache_umur_hari"] = umur_cache_hari(tickers)
+        return _rapikan(d0, min_bar, laporan)
 
-    if sumber in ("auto", "yahoo") and tickers_sisa:
-        d, gagal = dari_yahoo(tickers_sisa, periode=periode, diam=diam)
-        if d is not None:
-            laporan["sumber"].append(f"Yahoo ({len(d['Close'].columns)})")
-            data = d if data is None else _gabung(data, d)
+    if sumber == "arjum":
+        d0, gagal = dari_arjum(tickers, diam=diam)
+        if d0 is None:
+            raise SemuaSumberGagal("Arjum nggak balikin data apa pun.")
+        laporan["sumber"].append(f"Arjum ({d0['Close'].shape[1]})")
         laporan["gagal"] = gagal
+        if pakai_cache:
+            simpan_cache(d0)
+        return _rapikan(d0, min_bar, laporan)
 
+    # ---- jalur normal: Yahoo, se-irit mungkin --------------------------
+    segar, tambal, penuh = ([], [], tickers)
+    if pakai_cache:
+        segar, tambal, penuh = status_cache(tickers, min_bar, segar_hari)
+        laporan["hemat"] = len(segar)
+        if segar and not diam:
+            print(f"[i] {len(segar)} ticker cache-nya udah terbaru — "
+                  "nggak ditembak ulang.")
+
+    if sumber == "auto" and penuh:
+        # Arjum cuma dipakai kalau universe-nya KECIL — kalau nggak,
+        # kuotanya habis dan bandarmologi ikut mati.
+        try:
+            import casper_arjum as ar
+            muat = ar.tersedia() and len(penuh) <= 50 and ar.sisa_kuota() > len(penuh)
+        except Exception:                               # noqa: BLE001
+            muat = False
+        if muat:
+            d0, sisa = dari_arjum(penuh, diam=diam)
+            if d0 is not None:
+                bagian.append(d0)
+                laporan["sumber"].append(f"Arjum ({d0['Close'].shape[1]})")
+                penuh = sisa
+
+    for grup, per, label in ((tambal, "1mo", "tambal"), (penuh, periode, "penuh")):
+        if not grup:
+            continue
+        if not diam:
+            print(f"[i] Yahoo {label}: {len(grup)} ticker (period={per})")
+        d0, gagal = dari_yahoo(grup, periode=per, diam=diam)
+        laporan["gagal"] += gagal
+        if d0 is not None:
+            bagian.append(d0)
+            laporan["sumber"].append(f"Yahoo-{label} ({d0['Close'].shape[1]})")
+
+    data = None
+    for b in bagian:
+        data = b if data is None else _gabung(data, b)
     if data is not None and pakai_cache:
         n = simpan_cache(data)
         if not diam:
             print(f"[i] cache OHLCV diperbarui: {n} ticker")
 
-    # jaring pengaman: kalau semua sumber online gagal, pakai cache
-    if data is None or data["Close"].shape[1] == 0:
-        if not pakai_cache:
-            raise SemuaSumberGagal(
-                "Semua sumber data gagal dan cache dimatiin.")
-        d, kosong = muat_cache(tickers, min_bar=min_bar)
-        if d is None:
-            raise SemuaSumberGagal(
-                f"Semua sumber gagal ({laporan['sumber'] or 'nggak ada'}) "
-                "DAN cache disk kosong. Ini bukan 'nggak ada sinyal' — "
-                "datanya emang nggak kebaca sama sekali.")
-        umur = umur_cache_hari(tickers)
-        laporan["sumber"].append(f"CACHE DISK ({d['Close'].shape[1]})")
-        laporan["cache_umur_hari"] = umur
-        if not diam:
-            print(f"[!] Semua sumber online gagal — pakai CACHE DISK "
-                  f"(umur {umur:.0f} hari). Sinyalnya berdasar data lama.")
-        data = d
+    # gabung sama cache (buat yang segar + jaring pengaman)
+    if pakai_cache:
+        d_cache, _ = muat_cache(tickers, min_bar=min_bar)
+        if d_cache is not None:
+            if data is None:
+                # BEDAKAN dua hal yang kelihatannya sama:
+                #   (a) semua ticker cache-nya udah SEGAR -> sengaja nggak
+                #       narik apa-apa. Ini sehat.
+                #   (b) Yahoo GAGAL -> kepaksa pakai data lama. Ini bahaya.
+                # Kalau dua-duanya dilabeli "CACHE DISK", UI munculin
+                # peringatan merah tiap auto-scan padahal nggak ada yang
+                # rusak — dan peringatan yang sering salah bakal diabaikan
+                # pas dia beneran penting.
+                if not tambal and not penuh:
+                    laporan["sumber"].append(
+                        f"cache segar ({d_cache['Close'].shape[1]})")
+                    if not diam:
+                        print("[i] Semua ticker udah terbaru — nol request "
+                              "ke Yahoo.")
+                else:
+                    umur = umur_cache_hari(tickers)
+                    laporan["cache_umur_hari"] = umur
+                    laporan["gagal_online"] = True
+                    laporan["sumber"].append(
+                        f"CACHE DISK ({d_cache['Close'].shape[1]})")
+                    if not diam:
+                        print(f"[!] Yahoo gagal total — pakai CACHE DISK "
+                              f"(umur {umur:.0f} hari). Sinyal berdasar "
+                              "data lama.")
+                data = d_cache
+            else:
+                data = _gabung(d_cache, data)   # data baru menang
+                if segar:
+                    laporan["sumber"].append(f"cache segar ({len(segar)})")
 
+    if data is None:
+        raise SemuaSumberGagal(
+            "Yahoo gagal DAN cache disk kosong. Ini bukan 'nggak ada "
+            "sinyal' — datanya emang nggak kebaca sama sekali.")
+    return _rapikan(data, min_bar, laporan)
+
+
+def _rapikan(data, min_bar, laporan):
     ok = data["Close"].dropna(axis=1, thresh=min_bar).columns
     ok = [c for c in ok if all(c in data[k].columns for k in data)]
     if not ok:
@@ -352,7 +471,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Cek sumber data OHLCV")
     ap.add_argument("--tickers", nargs="+",
                     default=["BBCA", "BBRI", "TLKM", "ANTM"])
-    ap.add_argument("--sumber", default="auto",
+    ap.add_argument("--sumber", default="yahoo",
                     choices=["auto", "arjum", "yahoo", "cache"])
     a = ap.parse_args()
     try:
