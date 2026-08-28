@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.5
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.5.1
 ============================================================================
 Jalankan:  streamlit run casper_app.py
 Butuh:     pip install streamlit yfinance pandas numpy pytz
@@ -47,7 +47,7 @@ _hilang = [a for a in _WAJIB if not hasattr(ce, a)]
 if _hilang:
     st.error(
         "### ⚠️ Versi engine nggak cocok\n\n"
-        f"`casper_app.py` ini versi **4.5**, tapi `casper_engine.py` yang "
+        f"`casper_app.py` ini versi **4.5.1**, tapi `casper_engine.py` yang "
         f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
         f"kurang: `{'`, `'.join(_hilang[:5])}`"
         + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
@@ -56,9 +56,9 @@ if _hilang:
         "sama-sama versi terbaru dan ada di folder yang sama.\n\n"
         "Cek dari mesin lo:\n"
         "```bash\n"
-        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.5\"\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.5.1\"\n"
         "git add casper_*.py requirements.txt .gitignore\n"
-        "git commit -m 'Casper v4.5'\n"
+        "git commit -m 'Casper v4.5.1'\n"
         "git push\n"
         "```\n"
         "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "
@@ -397,30 +397,68 @@ if tombol_tele and "hasil" in st.session_state:
 @st.fragment(run_every=_menit * 60
              if (auto_on and "cfg" in st.session_state) else None)
 def auto_scan():
+    """Scan berkala.
+
+    TIGA BUG YANG DIPERBAIKI DI SINI (semuanya bikin gejala yang sama:
+    jam "scan terakhir" beku, dan lo nggak tau kenapa):
+
+    1. `scan_error` DI-SET TAPI NGGAK PERNAH DITAMPILIN. Kalau Yahoo lagi
+       ngeblok, scan-nya gagal, error-nya disimpan ke session_state...
+       terus nggak dirender di mana pun. Diam total.
+    2. JALUR ERROR NGGAK PANGGIL `st.rerun()`. Cuma jalur sukses yang
+       manggil. Jadi pas gagal, halaman nggak pernah digambar ulang dan
+       jam di caption tetap nunjukin scan sukses terakhir — kelihatan
+       kayak auto-scan-nya mati, padahal dia jalan terus dan gagal terus.
+    3. NGGAK ADA GUARD ANTI-TUMPANG-TINDIH. Scan universe penuh bisa
+       makan beberapa menit; kalau lebih lama dari interval, siklus
+       berikutnya numpuk di atasnya.
+    """
     ss = st.session_state
     if not auto_on or "cfg" not in ss:
         return
-    last = ss.get("last_scan")
+    if ss.get("scan_berjalan"):
+        return                       # siklus sebelumnya belum kelar
+    last = ss.get("last_attempt") or ss.get("last_scan")
     if last is not None and \
        (ce.now_wib() - last).total_seconds() < _menit * 60 - 10:
         return
+
     cfg = dict(ss["cfg"])
     if ss.get("auto_mode_on"):
-        cfg["mode"], *_ = ce.get_market_regime(ce.LAST_CLOSE)
+        try:
+            cfg["mode"], *_ = ce.get_market_regime(ce.LAST_CLOSE)
+        except Exception:                               # noqa: BLE001
+            pass                     # regime gagal != scan gagal
+    ss["scan_berjalan"] = True
+    ss["last_attempt"] = ce.now_wib()
     try:
         df, ev = jalankan_scan(cfg)
+        ss.update(hasil=df, eval=ev, cfg=cfg, meta=dict(ce.LAST_META),
+                  last_scan=ce.now_wib(), scan_error=None)
+        if auto_tele:
+            ce.kirim_tele(df)
     except Exception as e:                              # noqa: BLE001
         ss["scan_error"] = f"{type(e).__name__}: {e}"
-        ss["last_scan"] = ce.now_wib()
-        return
-    ss.update(hasil=df, eval=ev, cfg=cfg, meta=dict(ce.LAST_META),
-              last_scan=ce.now_wib(), scan_error=None)
-    if auto_tele:
-        ce.kirim_tele(df)
+    finally:
+        ss["scan_berjalan"] = False
+    # rerun DI KEDUA JALUR — sukses maupun gagal. Kalau nggak, kegagalan
+    # jadi tak terlihat dan lo cuma lihat jam yang nggak gerak.
     st.rerun(scope="app")
 
 
 auto_scan()
+
+# ── STATUS AUTO-SCAN: harus selalu kelihatan hidup atau matinya ────────
+_ss = st.session_state
+if _ss.get("scan_error"):
+    st.error(
+        f"🛑 **Scan otomatis terakhir GAGAL** "
+        f"({_ss.get('last_attempt', ce.now_wib()):%H:%M:%S} WIB)\n\n"
+        f"`{_ss['scan_error']}`\n\n"
+        "Angka di bawah ini dari scan sukses terakhir — **bukan data "
+        "sekarang**. Auto-scan tetap nyoba lagi tiap siklus.")
+if _ss.get("scan_berjalan"):
+    st.info("⏳ Lagi scan... halaman bakal ke-refresh sendiri kalau kelar.")
 
 meta = st.session_state.get("meta", {})
 if "last_scan" in st.session_state:
@@ -432,6 +470,21 @@ if "last_scan" in st.session_state:
         + (f" · {meta['hemat']} dilewati (cache segar)"
            if meta.get("hemat") else "")
         + (f" · 🔄 Auto tiap {interval}" if auto_on else " · Auto OFF"))
+if auto_on and "last_scan" in st.session_state:
+    # Tanpa ini, nggak ada cara tau bedanya "belum waktunya" sama "macet".
+    _basis = (st.session_state.get("last_attempt")
+              or st.session_state["last_scan"])
+    _next = _basis + pd.Timedelta(minutes=_menit)
+    _sisa = (_next - ce.now_wib()).total_seconds()
+    if _sisa > 0:
+        st.caption(f"⏭️ Scan berikutnya sekitar **{_next:%H:%M}** WIB "
+                   f"(~{int(_sisa // 60)} menit lagi) · halaman refresh "
+                   "sendiri, nggak usah di-reload")
+    else:
+        st.caption(f"⏭️ Scan berikutnya **udah lewat {int(-_sisa // 60)} "
+                   "menit**. Kalau nggak gerak-gerak juga, tab-nya "
+                   "kemungkinan kehilangan koneksi ke server — reload "
+                   "sekali buat nyambung lagi.")
 if meta.get("gagal_online"):
     _umur = meta.get("cache_umur_hari")
     st.markdown(
