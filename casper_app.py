@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.4.2
+CASPER IDX — MESIN HIJAU (UI Streamlit) — v4.4.3
 ============================================================================
 Jalankan:  streamlit run casper_app.py
 Butuh:     pip install streamlit yfinance pandas numpy pytz
@@ -47,7 +47,7 @@ _hilang = [a for a in _WAJIB if not hasattr(ce, a)]
 if _hilang:
     st.error(
         "### ⚠️ Versi engine nggak cocok\n\n"
-        f"`casper_app.py` ini versi **4.4.2**, tapi `casper_engine.py` yang "
+        f"`casper_app.py` ini versi **4.4.3**, tapi `casper_engine.py` yang "
         f"ke-load versi **{getattr(ce, 'VERSI', '3.x (lama)')}** — "
         f"kurang: `{'`, `'.join(_hilang[:5])}`"
         + (f" (+{len(_hilang) - 5} lagi)" if len(_hilang) > 5 else "")
@@ -56,9 +56,9 @@ if _hilang:
         "sama-sama versi terbaru dan ada di folder yang sama.\n\n"
         "Cek dari mesin lo:\n"
         "```bash\n"
-        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.4.2\"\n"
+        "grep -m1 VERSI casper_engine.py    # harus: VERSI = \"4.4.3\"\n"
         "git add casper_*.py requirements.txt .gitignore\n"
-        "git commit -m 'Casper v4.4.2'\n"
+        "git commit -m 'Casper v4.4.3'\n"
         "git push\n"
         "```\n"
         "Habis push, Streamlit Cloud auto-redeploy ~1 menit. Kalau nggak "

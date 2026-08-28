@@ -834,3 +834,49 @@ dan lo nggak punya cara tau mana yang bener.
 
 Jalur Arjum → OHLCV udah diuji ujung ke ujung lawan server tiruan: 4 ticker,
 400 bar, kegabung rapi jadi DataFrame OHLCV.
+
+---
+
+# v4.4.2 → v4.4.3 — `getpass` di Windows itu rusak, dan alasan gue milih dia keliru
+
+## Gejalanya
+
+```
+Tempel API key Arjum (nggak kelihatan): Traceback ...
+  File "...\Lib\getpass.py", line 110, in win_getpass
+    raise KeyboardInterrupt
+KeyboardInterrupt
+```
+
+Belum sempat ngetik apa-apa, udah dianggap dibatalin.
+
+## Sebabnya
+
+`getpass.getpass()` di Windows pakai `msvcrt.getwch()` — baca konsol mentah,
+karakter per karakter. Kalau karakter pertama yang kebaca `\x03` (Ctrl-C),
+getpass langsung ngelempar `KeyboardInterrupt`. Di Windows Terminal / VS Code /
+beberapa host PowerShell, paste bisa kebaca kayak gitu.
+
+## Dan alasan gue milih getpass dari awal itu SALAH
+
+Gue bilang "biar key-nya nggak nyangkut di riwayat PowerShell". Yang kesimpen di
+`ConsoleHost_history.txt` itu **cuma baris perintah**. Apa yang lo ketik ke
+prompt `input()` **nggak** ikut kesimpen.
+
+Jadi `input()` biasa sama amannya dari sisi riwayat — bedanya cuma keliatan di
+layar. Yang beneran perlu dihindari itu `--set-key sk_live_...` langsung di baris
+perintah, karena **itu** yang masuk riwayat.
+
+Gue milih mekanisme yang lebih ribet buat masalah yang nggak ada, dan mekanisme
+itu justru rusak di platform lo.
+
+## Fix
+
+`_minta_key()` nyoba getpass dulu; **kalau gagal karena apa pun** —
+KeyboardInterrupt, EOFError, exception lain — dia turun ke `input()` biasa sambil
+ngejelasin kenapa. `KeyboardInterrupt` juga ditangkap eksplisit di `_panggil`,
+soalnya dia bukan turunan `Exception` dan lolos dari `except Exception`.
+
+Diuji dengan getpass yang sengaja dibikin ngelempar `KeyboardInterrupt` persis
+kayak di mesin lo: fallback jalan, key kesimpan, health check lolos, diagnosa
+`/history` keluar lengkap.

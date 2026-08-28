@@ -191,14 +191,18 @@ def _panggil(endpoint, code=None, params=None, cfg=None, pakai_cache=True):
         import sys
         if sys.stdin.isatty() and sys.stdout.isatty():
             print("[!] API key Arjum belum disetel.")
-            if set_key():
-                key = ambil_key()
+            try:
+                if set_key():
+                    key = ambil_key()
+            except KeyboardInterrupt:
+                print("\n[i] Dibatalin.")
         if key is None:
             raise RuntimeError(
                 "API key Arjum nggak ketemu.\n\n"
-                "  Cara tercepat (key-nya diketik tersembunyi, nggak nyangkut\n"
-                "  di history PowerShell):\n"
-                "      python casper_arjum.py --set-key\n\n"
+                "  Cara tercepat:\n"
+                "      python casper_arjum.py --set-key\n"
+                "  (key-nya diketik ke prompt — NGGAK masuk riwayat\n"
+                "   PowerShell, karena yang kesimpen cuma baris perintah)\n\n"
                 "  Alternatif: env var buat sekali pakai —\n"
                 "      $env:ARJUM_KEY = \"sk_live_...\"        (PowerShell)\n"
                 "      set ARJUM_KEY=sk_live_...                (CMD)\n\n"
@@ -560,21 +564,47 @@ def diagnosa_skema(endpoint="broker_summary", code="BBCA", **params):
     print(f"— contoh baris: {json.dumps(rows[0], ensure_ascii=False)[:300]}")
 
 
+def _minta_key() -> str:
+    """Minta key dari user. Nggak pakai getpass sebagai satu-satunya jalan.
+
+    KENAPA: `getpass.getpass()` di Windows pakai `msvcrt.getwch()` yang
+    baca konsol mentah. Di Windows Terminal / VS Code / beberapa host
+    PowerShell, dia bisa langsung balikin `\x03` (Ctrl-C) waktu di-paste
+    — dan getpass nganggep itu pembatalan, terus ngelempar
+    KeyboardInterrupt sebelum lo sempat ngetik apa-apa. Kejadian beneran,
+    dua kali berturut-turut.
+
+    Dan alasan gue milih getpass dari awal itu KELIRU: yang kesimpen di
+    riwayat PowerShell cuma BARIS PERINTAH. Apa yang lo ketik ke prompt
+    `input()` NGGAK masuk ke ConsoleHost_history.txt. Jadi input biasa
+    sama amannya dari sisi riwayat — bedanya cuma keliatan di layar.
+
+    Yang beneran perlu dihindari: `--set-key sk_live_...` langsung di
+    baris perintah, karena ITU yang masuk riwayat.
+    """
+    import getpass
+    try:
+        k = getpass.getpass("Tempel API key Arjum (nggak kelihatan): ")
+        if k:
+            return k.strip()
+    except (KeyboardInterrupt, EOFError, Exception) as e:  # noqa: BLE001
+        print(f"[i] Mode ketik-tersembunyi nggak jalan di terminal ini "
+              f"({type(e).__name__}) — pakai input biasa.")
+    try:
+        return input("Tempel API key Arjum (kelihatan di layar, tapi "
+                     "NGGAK masuk riwayat PowerShell): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return ""
+
+
 def set_key(key: str | None = None, path=KONFIG):
     """Simpan API key ke arjum_config.json tanpa perlu ngedit JSON manual.
 
-    Kalau `key` kosong, dimintanya lewat getpass — key-nya NGGAK keketik
-    di layar dan NGGAK nyangkut di riwayat perintah. PowerShell nyimpen
-    history ke ConsoleHost_history.txt di disk, jadi ngetik
-    `--set-key sk_live_...` langsung di command line itu bikin key lo
-    kesimpen dalam bentuk teks polos.
-
     Konfig yang udah ada digabung, bukan ditimpa.
     """
-    import getpass
     if not key:
-        key = getpass.getpass("Tempel API key Arjum (nggak kelihatan): ")
-    key = key.strip()
+        key = _minta_key()
+    key = (key or "").strip().strip('"').strip("'")
     if not key:
         print("[!] Kosong — dibatalin.")
         return False
