@@ -73,13 +73,12 @@ import argparse
 import json
 import math
 import os
-import time
 
 import numpy as np
 import pandas as pd
 import pytz
 
-VERSI = "4.3"
+VERSI = "4.4.2"
 TZ_WIB = pytz.timezone("Asia/Jakarta")
 
 
@@ -284,49 +283,49 @@ class DataKosong(RuntimeError):
     """
 
 
-def unduh_ohlcv(tickers, periode=PERIODE):
-    import yfinance as yf
-    bag = {k: [] for k in ("Open", "Close", "High", "Low", "Volume")}
-    gagal = []
-    for i in range(0, len(tickers), BATCH):
-        chunk = tickers[i:i + BATCH]
-        try:
-            df = yf.download(chunk, period=periode, auto_adjust=True,
-                             progress=False, threads=True)
-        except Exception as e:                       # noqa: BLE001
-            gagal += chunk
-            print(f"    [!] batch gagal ({e})")
-            continue
+def unduh_ohlcv(tickers, periode=PERIODE, sumber="auto"):
+    """Ambil OHLCV lewat casper_data (Arjum -> Yahoo -> cache disk).
+
+    v4.3 ke bawah nembak Yahoo langsung, batch 50, tanpa cache. Sekali
+    Yahoo ngeblok, SEMUA saham hilang dan scan balik kosong — nggak bisa
+    dibedain dari "pasar lagi sepi". Sekarang ada tiga lapis, dan sumber
+    yang kepakai selalu dilaporin di LAST_META["sumber_data"].
+    """
+    try:
+        import casper_data as cd
+    except Exception:                                   # noqa: BLE001
+        cd = None
+    if cd is None:                                      # cadangan terakhir
+        import yfinance as yf
+        df = yf.download(list(tickers), period=periode, auto_adjust=True,
+                         progress=False)
         if df is None or df.empty:
-            gagal += chunk
-            continue
-        if not isinstance(df.columns, pd.MultiIndex):
-            df.columns = pd.MultiIndex.from_product([df.columns, [chunk[0]]])
-        for k in bag:
-            if k in df.columns.get_level_values(0):
-                bag[k].append(df[k])
-        print(f"    data {min(i + BATCH, len(tickers))}/{len(tickers)}")
-        if i + BATCH < len(tickers):
-            time.sleep(JEDA)
-
-    if not bag["Close"]:
-        raise DataKosong(
-            f"Yahoo Finance nggak balikin data buat {len(tickers)} ticker "
-            f"({len(gagal)} batch gagal). Cek koneksi / rate limit, "
-            "jangan dianggap 'nggak ada sinyal'.")
-
-    out = {k: pd.concat(v, axis=1) for k, v in bag.items() if v}
-    out = {k: v.loc[:, ~v.columns.duplicated()] for k, v in out.items()}
-    # butuh minimal 200 bar biar MA/momentum panjang punya arti
-    ok = out["Close"].dropna(axis=1, thresh=200).columns
-    ok = [c for c in ok if all(c in out[k].columns for k in out)]
-    if len(ok) == 0:
-        raise DataKosong("Semua ticker kebuang: sejarah harga < 200 bar.")
-    return {k: v[ok] for k, v in out.items()}
+            raise DataKosong("Yahoo nggak balikin data, dan casper_data.py "
+                             "nggak ketemu buat fallback.")
+        return {k: df[k] for k in ("Open", "High", "Low", "Close", "Volume")
+                if k in df.columns.get_level_values(0)}
+    try:
+        data, lap = cd.ambil_ohlcv(list(tickers), periode=periode,
+                                   sumber=sumber, min_bar=200)
+    except cd.SemuaSumberGagal as e:
+        raise DataKosong(str(e)) from e
+    LAST_META["sumber_data"] = " + ".join(lap["sumber"]) or "-"
+    LAST_META["n_gagal_data"] = len(lap.get("gagal", []))
+    LAST_META["cache_umur_hari"] = lap.get("cache_umur_hari", float("nan"))
+    print(f"[i] Sumber data: {LAST_META['sumber_data']} — "
+          f"{lap['n_dapat']}/{lap['n_minta']} ticker")
+    return data
 
 
-def unduh_ihsg(periode=PERIODE):
-    """Return harian IHSG buat residual momentum (buku 3.7)."""
+def unduh_ihsg(periode=PERIODE, close_universe=None):
+    """Return harian IHSG buat residual momentum (buku 3.7).
+
+    Kalau IHSG gagal diambil, DULU f_resmom langsung nol buat semua saham
+    — faktor terpenting buat IDX mati diam-diam. Sekarang ada cadangan:
+    rata-rata return seluruh universe dipakai sebagai proksi indeks.
+    Bukan IHSG persis (nggak ada bobot kapitalisasi), tapi jauh lebih baik
+    daripada ngebuang faktornya.
+    """
     import yfinance as yf
     try:
         df = yf.download(IHSG, period=periode, auto_adjust=True,
@@ -334,11 +333,18 @@ def unduh_ihsg(periode=PERIODE):
         s = df["Close"]
         if isinstance(s, pd.DataFrame):
             s = s.iloc[:, 0]
-        return s.dropna()
+        s = s.dropna()
+        if len(s) > 60:
+            return s
     except Exception as e:                           # noqa: BLE001
-        print(f"    [!] IHSG gagal diambil ({e}) — residual momentum "
-              "dilewati (faktor f_resmom = 0 buat semua saham).")
-        return None
+        print(f"    [!] IHSG gagal diambil ({e}).")
+    if close_universe is not None and close_universe.shape[1] >= 20:
+        print("    [i] IHSG diganti proksi: rata-rata seluruh universe "
+              "(equal-weight). f_resmom tetap jalan.")
+        proksi = close_universe.pct_change().mean(axis=1).fillna(0)
+        return (1 + proksi).cumprod() * 1000
+    print("    [!] Nggak ada IHSG maupun proksi — f_resmom = 0.")
+    return None
 
 
 def data_demo(tickers, n=520, seed=42):
@@ -1431,8 +1437,9 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
          min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA,
          fresh_max=FRESH_MAX_BAR, min_iq=70.0, max_risiko=8.0, min_rr=1.5,
          bandar=None, hari_bandar=5, proyeksi_top=40,
-         bandar_top=40, bandar_asing=True):
+         bandar_top=40, bandar_asing=True, sumber="auto"):
     global LAST_CLOSE, LAST_META
+    LAST_META = {}
     if tickers is None:
         tickers = muat_ticker_semua() if semua else DEFAULT_TICKERS
     else:
@@ -1442,8 +1449,8 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
         data = data_demo(tickers)
         ihsg = data["Close"].mean(axis=1)          # proksi indeks
     else:
-        data = unduh_ohlcv(tickers)
-        ihsg = unduh_ihsg()
+        data = unduh_ohlcv(tickers, sumber=sumber)
+        ihsg = unduh_ihsg(close_universe=data["Close"])
 
     close = data["Close"]
     LAST_CLOSE = close
@@ -1463,8 +1470,8 @@ def scan(tickers=None, demo=False, semua=False, mode="Swing",
         selisih = (hari_ini - tgl_bar).days
         bar_status = f"BASI ({selisih} hari lalu)"
         bar_partial = False
-    LAST_META = {"data_date": str(tgl_bar), "bar": bar_status,
-                 "porsi_sesi": porsi, "mode": mode}
+    LAST_META.update({"data_date": str(tgl_bar), "bar": bar_status,
+                      "porsi_sesi": porsi, "mode": mode})
 
     rows = []
     for t in close.columns:
@@ -2043,7 +2050,8 @@ def kirim_tele(df, top=8, conf=CONF_TELE, paksa=False, diam_kalau_kosong=True):
 # ════════════════════════════════════════════════════════════════════════
 def jalankan_eod(semua=True, tickers=None, demo=False, top=6,
                  mode_list=("BSJP", "Swing", "Bagger"), tele=True,
-                 min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA):
+                 min_turnover_jt=MIN_TURNOVER_JT, min_harga=MIN_HARGA,
+                 sumber="auto"):
     """SCAN EOD — satu jalur buat aksi besok pagi.
 
     Tiga horizon sekaligus, karena keputusannya emang beda-beda:
@@ -2060,7 +2068,8 @@ def jalankan_eod(semua=True, tickers=None, demo=False, top=6,
         print(f"\n=== EOD: {mode} ===")
         try:
             df = scan(tickers=tickers, demo=demo, semua=semua, mode=mode,
-                      min_turnover_jt=min_turnover_jt, min_harga=min_harga)
+                      min_turnover_jt=min_turnover_jt,
+                      min_harga=min_harga, sumber=sumber)
         except DataKosong as e:
             print(f"[X] {e}")
             continue
@@ -2091,6 +2100,7 @@ def kirim_tele_eod(ringkas, top=6, conf=CONF_TELE):
     baris = ["👻 CASPER — RENCANA BESOK (EOD)",
              f"📅 bar data {meta.get('data_date','?')} "
              f"({meta.get('bar','?')})",
+             f"🔌 sumber: {meta.get('sumber_data','?')}",
              f"⏰ disusun {now:%H:%M} WIB · {now:%d %b %Y}",
              "━━━━━━━━━━━━━━━━━━━━"]
     total = 0
@@ -2181,6 +2191,9 @@ def main():
     ap.add_argument("--min-turnover", type=int, default=MIN_TURNOVER_JT)
     ap.add_argument("--min-harga", type=int, default=MIN_HARGA)
     ap.add_argument("--fresh", type=int, default=FRESH_MAX_BAR)
+    ap.add_argument("--sumber", default="auto",
+                    choices=["auto", "arjum", "yahoo", "cache"],
+                    help="sumber OHLCV; auto = Arjum -> Yahoo -> cache disk")
     ap.add_argument("--eod", action="store_true",
                     help="scan EOD 3 horizon (BSJP/Swing/Bagger) + kirim "
                          "rencana besok ke Telegram")
@@ -2196,7 +2209,7 @@ def main():
                      tickers=args.tickers, demo=args.demo, top=args.top,
                      mode_list=tuple(args.eod_mode), tele=args.tele,
                      min_turnover_jt=args.min_turnover,
-                     min_harga=args.min_harga)
+                     min_harga=args.min_harga, sumber=args.sumber)
         return
     mode = args.mode
     if args.auto_mode:
@@ -2206,7 +2219,8 @@ def main():
     try:
         df = scan(tickers=args.tickers, demo=args.demo, semua=args.all,
                   mode=mode, min_turnover_jt=args.min_turnover,
-                  min_harga=args.min_harga, fresh_max=args.fresh)
+                  min_harga=args.min_harga, fresh_max=args.fresh,
+                  sumber=args.sumber)
     except DataKosong as e:
         print(f"[X] {e}")
         return

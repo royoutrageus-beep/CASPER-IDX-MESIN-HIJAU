@@ -645,3 +645,192 @@ nggak error, cuma nggak nguji apa-apa. Itu lebih bahaya daripada gagal. Sekarang
 kalau label nggak ketemu, tesnya langsung merah.
 
 Sekarang 8 skenario, lolos di Streamlit 1.40 **dan** 1.61.
+
+---
+---
+
+# v4.3 → v4.4 — Yahoo bukan lagi tumpuan tunggal
+
+## Ini bukan bug di kode lo
+
+Isu 429 di yfinance **ditutup maintainer sebagai "not planned"** — mereka
+nganggap itu batasan dari sisi Yahoo, bukan bug library. Artinya nambal
+yfinance atau naikin versinya nggak bakal nyelesaiin.
+
+Tiga hal yang bikin setup lo kena lebih parah dari orang lain:
+
+1. **Streamlit Cloud & GitHub Actions jalan dari IP datacenter.** Yahoo nyaring
+   IP datacenter jauh lebih galak daripada IP rumahan — makanya di laptop kadang
+   jalan, di Cloud mati terus.
+2. **Auto-scan tiap 15 menit × ~700 ticker** = ribuan request/hari dari satu IP.
+   Dari sisi Yahoo, itu emang kelihatan kayak scraper.
+3. Sekali diblokir, **semua saham hilang sekaligus** — dan `DataKosong` bikin
+   scan balik nol. Lo nggak bisa bedain "pasar sepi" dari "datanya nggak kebaca".
+
+## File baru: `casper_data.py` — tiga lapis sumber
+
+```
+SUMBER 1  Arjum /api/history/{code}   <- lo udah bayar ini, data resmi IDX
+SUMBER 2  Yahoo Finance                <- cadangan
+SUMBER 3  CACHE DISK (cache_ohlcv/)    <- jaring pengaman terakhir
+```
+
+**Cache disk-nya bisa dipakai HARI INI**, tanpa nunggu skema Arjum. Tiap bar
+harian yang berhasil diambil disimpan per ticker. Kalau besok Yahoo ngeblok,
+scan tetap jalan pakai data kemarin — dan **dilabeli BASI dengan jelas**, bukan
+diam-diam.
+
+Empat skenario yang udah diuji:
+
+| Skenario | Hasil |
+|---|---|
+| Yahoo jalan | `Yahoo (60)` — cache ikut keisi 60 file |
+| Yahoo diblokir total besoknya | `CACHE DISK (60)` — **scan tetap jalan** |
+| Yahoo diblokir + cache kosong | error yang **nyebut jelas** "datanya emang nggak kebaca sama sekali" |
+| Arjum sebagian, Yahoo sisanya | `Arjum (25) + Yahoo (35)` — kegabung |
+
+Sumber yang kepakai selalu kelihatan: di caption Streamlit, di pesan Telegram
+EOD, dan di `LAST_META["sumber_data"]`.
+
+## Yahoo-nya sendiri dibikin lebih sabar
+
+- batch **50 → 25**, jeda 1s → 2s, plus **backoff eksponensial** (2s, 4s, 8s)
+- pakai **curl_cffi** dengan impersonasi Chrome kalau tersedia — request yang
+  bawa sidik jari TLS browser beneran lebih jarang kesaring daripada
+  python-requests polos. Kalau `curl_cffi` nggak keinstall, otomatis pakai sesi
+  biasa
+- batch yang gagal **nggak lagi ngebatalin semuanya** — yang berhasil tetap
+  kepakai, yang gagal dicatat di `n_gagal_data`
+
+## Bonus: IHSG gagal nggak lagi mematikan `f_resmom`
+
+Dulu kalau `^JKSE` gagal diambil, `f_resmom` langsung nol buat semua saham —
+faktor terpenting buat IDX mati diam-diam. Sekarang ada proksi: **rata-rata
+return seluruh universe** (equal-weight). Bukan IHSG persis (nggak ada bobot
+kapitalisasi), tapi jauh lebih baik daripada ngebuang faktornya.
+
+## 🔴 Tes gue sendiri ternyata bohong
+
+Waktu nyambungin `casper_data`, tesnya bilang **"SEMUA LOLOS ✅"** — padahal
+tiap run nampilin `Scan gagal: TypeError: <lambda>() got an unexpected keyword
+argument 'sumber'`. App-nya rusak total, tesnya hijau.
+
+Dua sebabnya:
+
+1. `cek()` cuma ngecek `at.exception`. Kotak merah dari `st.error` itu **udah
+   ditangkap app**, jadi nggak jadi exception — dan semua error yang udah kita
+   tangani rapi malah jadi **tak terlihat oleh tes**. Sekarang tes gagal kalau
+   ada kotak merah, bukan cuma exception.
+2. Monkeypatch-nya nyalin signature manual (`lambda tickers, periode=...`).
+   Waktu engine nambah parameter `sumber`, patch-nya meledak. Sekarang pakai
+   `*a, **k`.
+
+Ini kedua kalinya tes gue diam-diam nggak nguji apa-apa (yang pertama: widget
+dicari lewat indeks). Pola yang sama: **tes yang nggak pernah merah itu nggak
+ngebuktiin apa-apa.**
+
+## Workflow GitHub Actions ditambah
+
+- **Cache OHLCV antar-run** — runner itu ephemeral; tanpa ini jaring pengamannya
+  percuma karena tiap run mulai dari nol
+- step **`python uji_app.py`** — app rusak ketahuan sebelum Streamlit Cloud deploy
+- step **cek sumber data**, biar di log kelihatan jelas kalau turun ke cache
+- `--cek --endpoint history` buat diagnosa skema Arjum history
+
+## Yang masih gue butuhin dari lo
+
+`dari_arjum()` di `casper_data.py` udah siap, tapi skema `/api/history/{code}`
+**masih ditebak** (alias: `date/open/high/low/close/volume` + variasinya). Jalanin:
+
+```bash
+python casper_arjum.py --cek --endpoint history --code BBCA
+```
+
+Kalau field-nya kepetakan semua, langsung jalan. Kalau nggak, dia bakal nyebutin
+field apa aja yang ada — tempel output-nya ke gue, gue sesuaikan sekali jalan.
+
+Begitu `/api/history` nyambung, **Yahoo bisa dimatiin total** (`--sumber arjum`),
+dan seluruh kelas masalah ini hilang.
+
+---
+
+# v4.4 → v4.4.1 — cara ngisi API key Arjum
+
+`RuntimeError: API key Arjum nggak ketemu` itu bukan bug — `arjum_config.json`
+emang belum pernah dibikin. Tapi pesannya cuma nyebut "isi api_key di
+arjum_config.json" tanpa ngasih tau **caranya**, dan `--tulis-konfig` cuma bikin
+template yang tetap harus diedit tangan. Sekarang satu perintah:
+
+```bash
+python casper_arjum.py --set-key
+```
+
+Key-nya **diminta tersembunyi** (getpass) — nggak keketik di layar dan nggak
+nyangkut di riwayat perintah. Ini penting: PowerShell nyimpen history ke
+`ConsoleHost_history.txt` **di disk**, jadi ngetik `--set-key sk_live_...`
+langsung di command line bikin key lo kesimpen dalam bentuk teks polos.
+
+Yang dikerjain otomatis sesudah key disimpan:
+
+1. konfig lama **digabung**, bukan ditimpa
+2. **cek `.gitignore`** — kalau `arjum_config.json` belum tercakup, dia teriak
+   dan ngasih perintah buat nambahin. File itu isinya key lo
+3. langsung **tes sambungan** ke `/api/health`
+4. kalau sukses, dia nunjukin perintah berikutnya
+
+Pesan errornya juga diperbaiki — sekarang nyebut ketiga jalur (`--set-key`,
+env var PowerShell/CMD, secret buat Cloud & Actions).
+
+Diuji empat skenario: key bener, `.gitignore` belum nutup (teriak), key salah
+(403 dengan pesan jelas), dan konfig hilang (pesan actionable).
+
+---
+
+# v4.4.1 → v4.4.2 — dua hal yang bikin diagnosanya nggak bisa dipercaya
+
+## 1. Urutan perintah yang bisa kelewat = desain yang salah
+
+`--cek` langsung meledak kalau key belum ada, terus nyuruh jalanin `--set-key`
+dulu. Kalau lo copy perintah kedua duluan (dan itu wajar, itu perintah yang
+dicari), yang muncul traceback — kelihatan kayak app rusak padahal cuma belum
+disetel.
+
+Sekarang kalau dijalanin dari terminal beneran, dia **langsung nanya key-nya di
+tempat**, simpan, tes sambungan, lalu lanjut ngerjain perintah aslinya. Nggak
+ada urutan yang harus diinget lagi.
+
+Di GitHub Actions / Streamlit Cloud (bukan terminal interaktif) perilakunya
+tetap sama: error yang jelas, karena di situ emang nggak ada yang bisa ngetik.
+
+## 2. 🔴 Diagnosa yang bohong: `--cek --endpoint history` bilang gagal padahal sukses
+
+`diagnosa_skema` selalu ngecek pakai `peta_field` — itu peta **broker summary**
+(`bval`, `sval`, `nval`, `broker_code`, …). Waktu dipakai buat `/history` yang
+isinya OHLCV, hasilnya:
+
+```
+— kepetakan  : []
+— BELUM kepetakan: ['broker', 'broker_nama', 'buy_value', ...]
+```
+
+Padahal response-nya sempurna. **Diagnosa yang bohong itu lebih buruk daripada
+nggak ada diagnosa** — lo jadi ngira endpoint-nya rusak dan buang waktu ngoprek
+yang nggak salah.
+
+Sekarang ada `peta_untuk(endpoint)`: `/history` pakai `peta_history`
+(date/open/high/low/close/volume), sisanya pakai `peta_field`. Dan hasilnya
+dikasih kesimpulan eksplisit:
+
+```
+— kepetakan  : ['tanggal', 'Open', 'High', 'Low', 'Close', 'Volume']
+— BELUM kepetakan: []
+— ✅ SEMUA field kepetakan. Endpoint ini siap dipakai.
+```
+
+**`casper_data.dari_arjum()` sekarang narik daftar alias dari `casper_arjum`,
+bukan nyalin sendiri.** Waktu dua daftar itu kepisah, `--cek` bisa bilang
+"kepetakan semua" sementara pengambilan datanya gagal karena daftarnya beda —
+dan lo nggak punya cara tau mana yang bener.
+
+Jalur Arjum → OHLCV udah diuji ujung ke ujung lawan server tiruan: 4 ticker,
+400 bar, kegabung rapi jadi DataFrame OHLCV.

@@ -91,6 +91,19 @@ DEFAULT_KONFIG = {
                     "tanggal": ["latest_date", "broker_end", "date"]},
     "jalur_data": ["brokers", "data", "results", "items", "rows"],
     "broker_limit": 200,
+    # /history/{code} isinya OHLCV, bukan broker — jadi peta field-nya
+    # beda sendiri. Ditaruh di sini supaya casper_data.dari_arjum() dan
+    # diagnosa_skema() pakai daftar yang SAMA; kalau kepisah, `--cek`
+    # bisa bilang "kepetakan semua" sementara pengambilan datanya gagal
+    # (atau sebaliknya) — dan itu bikin diagnosanya nggak bisa dipercaya.
+    "peta_history": {
+        "tanggal": ["date", "tanggal", "trade_date", "t", "timestamp"],
+        "Open":    ["open", "o", "open_price", "pembukaan"],
+        "High":    ["high", "h", "high_price", "tertinggi"],
+        "Low":     ["low", "l", "low_price", "terendah"],
+        "Close":   ["close", "c", "close_price", "penutupan"],
+        "Volume":  ["volume", "v", "vol"],
+    },
 }
 
 
@@ -170,9 +183,27 @@ def _panggil(endpoint, code=None, params=None, cfg=None, pakai_cache=True):
     cfg = cfg or muat_konfig()
     key = ambil_key()
     if key is None:
-        raise RuntimeError(
-            "API key Arjum nggak ketemu. Isi `api_key` di "
-            "arjum_config.json, env ARJUM_KEY, atau st.secrets['arjum_key'].")
+        # Kalau dijalanin dari terminal beneran, LANGSUNG TANYA — jangan
+        # cuma ngasih error terus nyuruh jalanin perintah lain. Urutan
+        # perintah yang harus diinget itu sendiri sumber kesalahan:
+        # gampang banget kelewat, dan errornya keliatan kayak app rusak
+        # padahal cuma belum disetel.
+        import sys
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            print("[!] API key Arjum belum disetel.")
+            if set_key():
+                key = ambil_key()
+        if key is None:
+            raise RuntimeError(
+                "API key Arjum nggak ketemu.\n\n"
+                "  Cara tercepat (key-nya diketik tersembunyi, nggak nyangkut\n"
+                "  di history PowerShell):\n"
+                "      python casper_arjum.py --set-key\n\n"
+                "  Alternatif: env var buat sekali pakai —\n"
+                "      $env:ARJUM_KEY = \"sk_live_...\"        (PowerShell)\n"
+                "      set ARJUM_KEY=sk_live_...                (CMD)\n\n"
+                "  Di Streamlit Cloud / GitHub Actions: pakai secret "
+                "ARJUM_KEY.")
     ep = cfg["endpoint"].get(endpoint)
     if ep is None:
         raise KeyError(f"Endpoint '{endpoint}' nggak ada di {KONFIG}")
@@ -485,6 +516,21 @@ def proxy_dari_ohlcv(high, low, close, volume, n=20) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════════
 #  DIAGNOSA
 # ════════════════════════════════════════════════════════════════════════
+def peta_untuk(endpoint: str, cfg=None) -> dict:
+    """Peta field yang cocok buat endpoint ini.
+
+    `/history` isinya OHLCV, `/broker-summary` isinya baris broker — dua
+    skema yang beda. Sebelum ini, `--cek --endpoint history` ngecek pakai
+    peta broker dan ngelaporin `kepetakan: []` padahal response-nya
+    sempurna. Diagnosa yang bohong itu lebih buruk dari nggak ada
+    diagnosa: lo jadi ngira endpoint-nya rusak.
+    """
+    cfg = cfg or muat_konfig()
+    if endpoint == "history":
+        return cfg.get("peta_history", DEFAULT_KONFIG["peta_history"])
+    return cfg["peta_field"]
+
+
 def diagnosa_skema(endpoint="broker_summary", code="BBCA", **params):
     """Jalanin ini DULUAN waktu nyambungin/ngecek API."""
     cfg = muat_konfig()
@@ -500,17 +546,81 @@ def diagnosa_skema(endpoint="broker_summary", code="BBCA", **params):
         print("— response mentah:", json.dumps(mentah)[:600])
         return
     print(f"— field per baris: {sorted(rows[0].keys())}")
-    ketemu = {k: _cari(rows[0], a) for k, a in cfg["peta_field"].items()}
-    print(f"— kepetakan  : "
-          f"{[k for k, v in ketemu.items() if v is not None]}")
-    print(f"— BELUM kepetakan: "
-          f"{[k for k, v in ketemu.items() if v is None]}")
+    peta = peta_untuk(endpoint, cfg)
+    ketemu = {k: _cari(rows[0], al) for k, al in peta.items()}
+    ada = [k for k, v in ketemu.items() if v is not None]
+    kurang = [k for k, v in ketemu.items() if v is None]
+    print(f"— kepetakan  : {ada}")
+    print(f"— BELUM kepetakan: {kurang}")
+    if not kurang:
+        print("— ✅ SEMUA field kepetakan. Endpoint ini siap dipakai.")
+    else:
+        print(f"— ⚠️  Tambahin nama aslinya ke `{ 'peta_history' if peta is cfg.get('peta_history') else 'peta_field' }`"
+              f" di {KONFIG}.")
     print(f"— contoh baris: {json.dumps(rows[0], ensure_ascii=False)[:300]}")
+
+
+def set_key(key: str | None = None, path=KONFIG):
+    """Simpan API key ke arjum_config.json tanpa perlu ngedit JSON manual.
+
+    Kalau `key` kosong, dimintanya lewat getpass — key-nya NGGAK keketik
+    di layar dan NGGAK nyangkut di riwayat perintah. PowerShell nyimpen
+    history ke ConsoleHost_history.txt di disk, jadi ngetik
+    `--set-key sk_live_...` langsung di command line itu bikin key lo
+    kesimpen dalam bentuk teks polos.
+
+    Konfig yang udah ada digabung, bukan ditimpa.
+    """
+    import getpass
+    if not key:
+        key = getpass.getpass("Tempel API key Arjum (nggak kelihatan): ")
+    key = key.strip()
+    if not key:
+        print("[!] Kosong — dibatalin.")
+        return False
+    if not key.startswith("sk_"):
+        print(f"[!] Peringatan: key biasanya diawali 'sk_live_' / 'sk_test_', "
+              f"punya lo diawali '{key[:8]}...'. Tetap disimpan.")
+
+    cfg = {}
+    if os.path.exists(path):
+        try:
+            cfg = json.load(open(path, encoding="utf-8"))
+        except Exception:                               # noqa: BLE001
+            print(f"[!] {path} rusak — ditulis ulang dari awal.")
+    cfg["api_key"] = key
+    cfg.setdefault("base_url", DEFAULT_KONFIG["base_url"])
+    json.dump(cfg, open(path, "w", encoding="utf-8"), indent=2)
+    print(f"[i] Key disimpan ke {path} (…{key[-4:]})")
+
+    # Cek .gitignore — file ini isinya rahasia dan gampang kebawa commit
+    gi = ".gitignore"
+    aman = os.path.exists(gi) and any(
+        ln.strip().split("#")[0].strip() == path
+        for ln in open(gi, encoding="utf-8"))
+    if aman:
+        print(f"[i] {path} udah ada di .gitignore — aman. ✅")
+    else:
+        print(f"[!] BAHAYA: {path} BELUM ada di .gitignore. "
+              f"Tambahin barisnya sekarang sebelum commit:")
+        print(f"        echo {path} >> .gitignore")
+
+    print("\n[i] Nyoba sambungan...")
+    ok = cek_health()
+    if ok:
+        print("[i] Lanjut cek skema:")
+        print("      python casper_arjum.py --cek --endpoint history --code BBCA")
+    return ok
 
 
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Cek sambungan & skema Arjum")
+    ap.add_argument("--set-key", nargs="?", const="", default=None,
+                    metavar="KEY",
+                    help="simpan API key ke arjum_config.json. Tanpa nilai "
+                         "= diminta tersembunyi (disaranin, biar key nggak "
+                         "nyangkut di history PowerShell)")
     ap.add_argument("--cek", action="store_true")
     ap.add_argument("--health", action="store_true")
     ap.add_argument("--endpoint", default="broker_summary")
@@ -519,7 +629,9 @@ if __name__ == "__main__":
     ap.add_argument("--tulis-konfig", action="store_true")
     a = ap.parse_args()
 
-    if a.tulis_konfig:
+    if a.set_key is not None:
+        set_key(a.set_key or None)
+    elif a.tulis_konfig:
         contoh = json.loads(json.dumps(DEFAULT_KONFIG))
         contoh["api_key"] = "ISI_KEY_LO_DI_SINI"
         json.dump(contoh, open(KONFIG, "w", encoding="utf-8"),
@@ -531,6 +643,16 @@ if __name__ == "__main__":
     elif a.cek:
         diagnosa_skema(a.endpoint, code=a.code, flow=a.flow)
     else:
-        print("API key ketemu:", tersedia())
+        ada = tersedia()
+        print("API key ketemu:", "YA ✅" if ada else "BELUM ❌")
         print("base_url     :", muat_konfig()["base_url"])
-        print("Pakai --health / --cek / --tulis-konfig.")
+        print("config file  :",
+              f"{KONFIG} (ada)" if os.path.exists(KONFIG)
+              else f"{KONFIG} (belum ada)")
+        if not ada:
+            print("\nIsi key-nya dulu:")
+            print("    python casper_arjum.py --set-key")
+        else:
+            print("\nLangkah berikutnya:")
+            print("    python casper_arjum.py --health")
+            print("    python casper_arjum.py --cek --endpoint history --code BBCA")
