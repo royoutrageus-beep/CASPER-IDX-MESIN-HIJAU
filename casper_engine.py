@@ -78,7 +78,7 @@ import numpy as np
 import pandas as pd
 import pytz
 
-VERSI = "4.5"
+VERSI = "4.5.1"
 TZ_WIB = pytz.timezone("Asia/Jakarta")
 
 
